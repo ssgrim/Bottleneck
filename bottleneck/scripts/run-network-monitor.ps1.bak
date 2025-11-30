@@ -1,0 +1,153 @@
+# run-network-monitor.ps1
+# Long-running network connectivity monitor for diagnosing intermittent drops
+
+[CmdletBinding()]
+Param(
+    [Parameter(Mandatory=$true)][string]$TargetHost,
+    [int]$DurationHours = 2,
+    [int]$PingIntervalSeconds = 5,
+    [string[]]$AdditionalTargets = @('8.8.8.8','1.1.1.1','www.google.com'),
+    [int]$TracerouteIntervalMinutes = 15,
+    [switch]$DisableTraceroute
+)
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Bottleneck Network Monitor" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Prompt for duration if not specified
+if ($PSBoundParameters.Count -eq 0) {
+    Write-Host "This tool will monitor your network connection to detect intermittent drops." -ForegroundColor Yellow
+    Write-Host "Perfect for diagnosing streaming issues (Netflix, Spotify, etc.)" -ForegroundColor Yellow
+    Write-Host ""
+
+    $durationInput = Read-Host "Enter monitoring duration in hours (default: 4)"
+    if ($durationInput) { $DurationHours = [int]$durationInput }
+
+    $targetInput = Read-Host "Enter target host to monitor (default: www.yahoo.com)"
+    if ($targetInput) { $TargetHost = $targetInput }
+
+    $intervalInput = Read-Host "Enter ping interval in seconds (default: 5)"
+    if ($intervalInput) { $PingIntervalSeconds = [int]$intervalInput }
+}
+
+Write-Host ""
+Write-Host "Configuration:" -ForegroundColor Green
+Write-Host "  Target: $TargetHost" -ForegroundColor White
+Write-Host "  Duration: $DurationHours hours" -ForegroundColor White
+Write-Host "  Interval: $PingIntervalSeconds seconds" -ForegroundColor White
+Write-Host "  Estimated pings: $([math]::Floor(($DurationHours * 3600) / $PingIntervalSeconds))" -ForegroundColor White
+Write-Host ""
+
+# Calculate end time
+$startTime = Get-Date
+$endTime = $startTime.AddHours($DurationHours)
+Write-Host "Start time: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Cyan
+Write-Host "End time: $($endTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Cyan
+Write-Host ""
+
+# Save current power plan
+Write-Host "Saving current power plan..." -ForegroundColor Yellow
+$currentPowerPlan = (powercfg /GetActiveScheme) -replace '.*GUID:\s+([a-f0-9\-]+).*', '$1'
+Write-Host "Current plan: $currentPowerPlan" -ForegroundColor Gray
+
+# Disable sleep and hibernation temporarily
+Write-Host "Disabling sleep/hibernation for monitoring duration..." -ForegroundColor Yellow
+$originalACTimeout = (powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE | Select-String 'Current AC Power Setting Index:').ToString() -replace '.*:\s+0x([0-9a-f]+)', '$1'
+$originalDCTimeout = (powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE | Select-String 'Current DC Power Setting Index:').ToString() -replace '.*:\s+0x([0-9a-f]+)', '$1'
+$originalMonitorTimeout = (powercfg /query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE | Select-String 'Current AC Power Setting Index:').ToString() -replace '.*:\s+0x([0-9a-f]+)', '$1'
+
+powercfg /change standby-timeout-ac 0 | Out-Null
+powercfg /change standby-timeout-dc 0 | Out-Null
+powercfg /change hibernate-timeout-ac 0 | Out-Null
+powercfg /change hibernate-timeout-dc 0 | Out-Null
+powercfg /change monitor-timeout-ac 0 | Out-Null
+
+Write-Host "Power settings configured for long-running scan." -ForegroundColor Green
+Write-Host ""
+
+# Create log file
+$timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
+$logDir = "$PSScriptRoot/../Reports"
+$logFile = Join-Path $logDir "network-monitor-$timestamp.csv"
+$reportFile = Join-Path $logDir "network-monitor-$timestamp.html"
+# Write CSV header including multi-host and traceroute snapshot columns
+if (!(Test-Path $logFile)) {
+    $headers = @('Time','Target','Success','LatencyMs','RouterFail','DNSFail','ISPFail','Error','JitterMs','Notes')
+    Add-Content -Path $logFile -Value ($headers -join ',')
+}
+
+# Initialize CSV with headers
+"Timestamp,TargetHost,Status,ResponseTime,DNS,Router,ISP,Notes" | Out-File $logFile -Encoding UTF8
+
+# Get router IP (default gateway)
+$routerIP = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -First 1).NextHop
+Write-Host "Detected router: $routerIP" -ForegroundColor Cyan
+
+# Monitoring variables
+try {
+    # Monitoring loop
+    $endTime = (Get-Date).AddHours($DurationHours)
+    Write-Host "Starting network monitoring to $TargetHost for $DurationHours hour(s)." -ForegroundColor Green
+    $nextTrace = (Get-Date).AddMinutes($TracerouteIntervalMinutes)
+    while ((Get-Date) -lt $endTime) {
+        $start = Get-Date
+
+    $targets = @($TargetHost) + $AdditionalTargets
+    foreach ($t in $targets) {
+        try {
+            $ping = Test-Connection -ComputerName $t -Count 1 -ErrorAction Stop
+            $lat = [math]::Round($ping.Latency,2)
+            $success = $true
+            $routerFail = $false
+            $dnsFail = $false
+            $ispFail = $false
+            $err = ''
+            $notes = ''
+        } catch {
+        $row = @(
+            $start.ToString('s'),
+            $t,
+            $success,
+            $lat,
+            $routerFail,
+            $dnsFail,
+            $ispFail,
+            ($err -replace ',',';'),
+            0,
+            $notes
+        ) -join ','
+        Add-Content -Path $logFile -Value $row
+            $success = $false
+            $lat = 0
+            $err = $_.Exception.Message
+            $dnsFail = ($err -match 'NameResolutionFailure|No such host is known')
+            $routerFail = ($err -match 'Destination host unreachable|Request timed out')
+            $ispFail = (-not $dnsFail -and -not $routerFail)
+            $notes = 'drop'
+        }
+
+            Start-Sleep -Seconds $PingIntervalSeconds
+        }
+    }
+    finally {
+        # Restore power plan and generate summary/report
+        Write-Host "" 
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  MONITORING COMPLETE" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "" 
+        Write-Host "Restoring power plan..." -ForegroundColor Yellow
+        powercfg /setactive $currentPowerPlan | Out-Null
+        Write-Host "Power plan restored." -ForegroundColor Green
+        Write-Host ""
+
+        Write-Host "Report saved to: $reportFile" -ForegroundColor Green
+        Write-Host "Log file saved to: $logFile" -ForegroundColor Green
+    }
+<tr><td>DNS Issues</td><td>$dnsIssues</td><td>$dnsPercent%</td></tr>
+<tr><td>ISP/Internet Issues</td><td>$ispIssues</td><td>$ispPercent%</td></tr>
+</table>
+<h2>Recommendations</h2>
+
