@@ -9,7 +9,91 @@ Set-StrictMode -Version Latest
 
 if (!(Test-Path $TrendPath)) { throw "Trend file not found: $TrendPath" }
 $trend = Get-Content $TrendPath | ConvertFrom-Json
-$targets = @($trend.Targets)
+# Coerce targets to an array and normalize property names
+$targets = @()
+if ($trend.Targets) {
+  foreach ($item in @($trend.Targets)) {
+    $targetName = $null
+    if ($item.PSObject.Properties["Target"]) { $targetName = $item.Target }
+    elseif ($item.PSObject.Properties["Name"]) { $targetName = $item.Name }
+    elseif ($item.PSObject.Properties["Key"]) { $targetName = $item.Key }
+    $avg = $item.PSObject.Properties["AvgLatencyMs"] ? $item.AvgLatencyMs : $null
+    $p95 = $item.PSObject.Properties["P95LatencyMs"] ? $item.P95LatencyMs : $null
+    $fails = $item.PSObject.Properties["FailCount"] ? $item.FailCount : $null
+    $targets += [pscustomobject]@{ Target=$targetName; AvgLatencyMs=$avg; P95LatencyMs=$p95; FailCount=$fails }
+  }
+}
+
+# Traceroute hop-change parsing
+function Parse-LineHop([string]$l) {
+    if ($l -match '^\s*(\d+)\s+([^\s]+)\s+(\d+\.\d+)\s*ms') {
+        return [pscustomobject]@{ Hop=[int]$Matches[1]; Host=$Matches[2]; RTTms=[double]$Matches[3] }
+    }
+    return $null
+}
+function Load-Traceroute([string]$path) {
+    if (!(Test-Path $path)) { return @() }
+    $res = @()
+    foreach ($line in (Get-Content -Path $path -ErrorAction SilentlyContinue)) {
+        $h = Parse-LineHop $line
+        if ($h) { $res += $h }
+    }
+    return $res
+}
+function Diff-Hops($old,$new) {
+    $max = [math]::Max((($old|Measure-Object Hop -Maximum -ErrorAction SilentlyContinue).Maximum), (($new|Measure-Object Hop -Maximum -ErrorAction SilentlyContinue).Maximum))
+    if (!$max) { $max = 0 }
+    $out = @()
+    for ($i=1; $i -le $max; $i++) {
+        $o = $old | Where-Object Hop -eq $i | Select-Object -First 1
+        $n = $new | Where-Object Hop -eq $i | Select-Object -First 1
+        $out += [pscustomobject]@{
+            Hop=$i
+            OldHost=$o?.Host
+            NewHost=$n?.Host
+            HostChanged = ($o -and $n) ? ($o.Host -ne $n.Host) : $true
+            OldRTTms=$o?.RTTms
+            NewRTTms=$n?.RTTms
+            RTTDeltaMs = ($o -and $n) ? ([math]::Round(($n.RTTms - $o.RTTms),2)) : $null
+        }
+    }
+    return $out
+}
+
+$reportsDir = Join-Path $PWD 'Reports'
+$trFiles = @(Get-ChildItem $reportsDir -Filter 'traceroute-*.txt' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
+$pathSummaryHtml = ""
+if ($trFiles.Count -ge 2) {
+    $oldPath = $trFiles[-2].FullName
+    $newPath = $trFiles[-1].FullName
+    $oldHops = Load-Traceroute $oldPath
+    $newHops = Load-Traceroute $newPath
+    $diffs = Diff-Hops $oldHops $newHops
+    $rowsPath = ""
+    foreach ($d in $diffs) {
+        $chg = if ($d.HostChanged) { 'yes' } else { 'no' }
+        $oh = if ($d.OldHost) { $d.OldHost } else { '' }
+        $nh = if ($d.NewHost) { $d.NewHost } else { '' }
+        $or = if ($d.OldRTTms -ne $null) { $d.OldRTTms } else { '' }
+        $nr = if ($d.NewRTTms -ne $null) { $d.NewRTTms } else { '' }
+        $delta = if ($d.RTTDeltaMs -ne $null) { $d.RTTDeltaMs } else { '' }
+        $rowsPath += "<tr><td>$($d.Hop)</td><td>$oh</td><td>$nh</td><td>$chg</td><td>$or</td><td>$nr</td><td>$delta</td></tr>"
+    }
+    $oldFile = Split-Path $oldPath -Leaf
+    $newFile = Split-Path $newPath -Leaf
+    $pathSummaryHtml = @"
+<div class="card" style="grid-column:1/-1">
+  <h3>Path Changes (latest two traceroutes)</h3>
+  <table class="table">
+    <thead><tr><th>Hop</th><th>Old Host</th><th>New Host</th><th>Changed</th><th>Old RTT</th><th>New RTT</th><th>Δ RTT</th></tr></thead>
+    <tbody>
+      $rowsPath
+    </tbody>
+  </table>
+  <div class="small">Files: $oldFile → $newFile</div>
+</div>
+"@
+}
 
 $cssPage = if ($PageSize -eq 'A4') { '@page{size:A4;margin:10mm}' } else { '@page{size:Letter;margin:0.5in}' }
 
@@ -33,7 +117,7 @@ body{font-family:Segoe UI,Arial,sans-serif;margin:0;padding:16px;background:#fff
 </head>
 <body>
 <h2>Bottleneck Dashboard</h2>
-<div class="small">Window: $($trend.Window) | Generated: $([System.Web.HttpUtility]::HtmlEncode($trend.GeneratedAt))</div>
+<div class="small">Window: $($trend.Window) | Generated: $([System.Net.WebUtility]::HtmlEncode([string]$trend.GeneratedAt))</div>
 
 <div class="card">
   <div>
@@ -63,6 +147,7 @@ body{font-family:Segoe UI,Arial,sans-serif;margin:0;padding:16px;background:#fff
     </ul>
   </div>
 </div>
+<!--PATH_SUMMARY-->
 </body>
 </html>
 "@
@@ -70,9 +155,14 @@ body{font-family:Segoe UI,Arial,sans-serif;margin:0;padding:16px;background:#fff
 # Insert table rows
 $rows = ""
 foreach ($t in $targets) {
-    $rows += "<tr><td>$($t.Target)</td><td>$($t.AvgLatencyMs)</td><td>$($t.P95LatencyMs)</td><td>$($t.FailCount)</td></tr>"
+  $tgt = if ($t.Target) { $t.Target } else { '(unknown)' }
+  $avg = if ($t.AvgLatencyMs -ne $null) { $t.AvgLatencyMs } else { '' }
+  $p95 = if ($t.P95LatencyMs -ne $null) { $t.P95LatencyMs } else { '' }
+  $fail = if ($t.FailCount -ne $null) { $t.FailCount } else { '' }
+  $rows += "<tr><td>$tgt</td><td>$avg</td><td>$p95</td><td>$fail</td></tr>"
 }
 $html = $html -replace '<!--ROWS-->', $rows
+$html = $html -replace '<!--PATH_SUMMARY-->', $pathSummaryHtml
 
 $null = New-Item -ItemType Directory -Path (Split-Path $OutHtml) -ErrorAction SilentlyContinue
 Set-Content -Path $OutHtml -Value $html -Encoding UTF8
