@@ -1,0 +1,17 @@
+# Reports and scan results
+bottleneck/Reports/*.csv
+bottleneck/Reports/*.html
+bottleneck/Reports/*.json
+bottleneck/Reports/*.prom
+bottleneck/Reports/*.log
+
+# Keep directory structure
+!bottleneck/Reports/.gitkeep
+
+# User-specific files
+*.user
+*.suo
+
+# Temporary files
+*.tmp
+*.temp
