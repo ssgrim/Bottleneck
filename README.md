@@ -238,3 +238,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with ❤️ for IT professionals and power users who want their systems running at peak performance.**
+\n\n## Phase 6: Advanced Alert Fusion\nSee PHASE6-PLAN.md for objectives and usage.

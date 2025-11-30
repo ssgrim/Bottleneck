@@ -264,3 +264,24 @@ function New-AlertThresholdConfig {
     Write-Host "  Edit this file to customize alert thresholds." -ForegroundColor Gray
 }
 
+# Phase 6: Fused alert computation
+function Get-FusedAlertLevel {
+    [CmdletBinding()] param(
+        [Parameter()][object[]] = @(),
+        [Parameter()][object[]] = @(),
+        [Parameter()][object[]] = @()
+    )
+     = ( | Measure-Object).Count
+    C:\Users\mrred\OneDrive\Documents\Project\Scripts\Workbench-Health.ps1 = ( | Measure-Object).Count
+     = ( | Measure-Object).Count
+    # Simple weighted score; refine in follow-ups
+     = (2*) + (3*C:\Users\mrred\OneDrive\Documents\Project\Scripts\Workbench-Health.ps1) + (1*)
+    switch () {
+        {  -ge 12 } { return 'Critical' }
+        {  -ge 7 }  { return 'High' }
+        {  -ge 3 }  { return 'Moderate' }
+        {  -ge 1 }  { return 'Low' }
+        default       { return 'None' }
+    }
+}
+Export-ModuleMember -Function Get-FusedAlertLevel
