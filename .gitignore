@@ -5,6 +5,8 @@ Reports/*.html
 Reports/*.log
 Reports/*.json
 *.log
+Reports/
+bottleneck/Reports/
 
 # User-specific scan reports (keep structure, ignore content)
 artifacts/*
