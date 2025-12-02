@@ -32,6 +32,19 @@ function Test-BottleneckDNS {
         $fixId = ''
         $msg = if ($avgDNS -gt 200) { 'DNS resolution is very slow.' } elseif ($avgDNS -gt 100) { 'DNS resolution slower than optimal.' } else { 'DNS resolution normal.' }
 
+        # Supplement with recent DNS error events (last 7 days) when available
+        try {
+            $dnsEvents = Get-SafeWinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-DNS-Client/Operational'; StartTime = (Get-Date).AddDays(-7) } -MaxEvents 200 -TimeoutSeconds 10
+            if ($dnsEvents -and $dnsEvents.Count -gt 0) {
+                $recentErrors = $dnsEvents | Where-Object { $_.LevelDisplayName -eq 'Error' } | Select-Object -First 3
+                if ($recentErrors.Count -gt 0) {
+                    $evidence += "; Recent DNS errors detected"
+                    $msg = 'DNS resolution issues observed recently.'
+                    $impact = [Math]::Max($impact, 5)
+                }
+            }
+        } catch {}
+
         return New-BottleneckResult -Id 'DNS' -Tier 'Standard' -Category 'DNS' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg
     } catch {
         return $null
