@@ -13,6 +13,23 @@ function Get-BottleneckEventLogSummary {
         RecentWarnings = $warnings | Select-Object -First 5 -Property TimeCreated, Message
     }
 }
+function New-WiresharkSection {
+    param([hashtable]$Summary)
+    $global:__reportSections += @{
+        Title = 'Wireshark Network Summary'
+        Html = @(
+            '<div class="section">',
+            '<h2>Wireshark Network Summary</h2>',
+            '<div class="metrics-grid">',
+            "<div class='metric-card'><div class='metric-label'>Packets</div><div class='metric-value'>${($Summary.Packets)}</div></div>",
+            "<div class='metric-card'><div class='metric-label'>Drops</div><div class='metric-value'>${($Summary.Drops)}</div></div>",
+            "<div class='metric-card'><div class='metric-label'>Avg Latency</div><div class='metric-value'>${($Summary.AvgLatencyMs)} ms</div></div>",
+            "<div class='metric-card'><div class='metric-label'>Max Latency</div><div class='metric-value'>${($Summary.MaxLatencyMs)} ms</div></div>",
+            '</div>',
+            '</div>'
+        ) -join "\n"
+    }
+}
 
 function Get-BottleneckPreviousScan {
     param([ValidateNotNullOrEmpty()][string]$ReportsPath)

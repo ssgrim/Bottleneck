@@ -58,6 +58,7 @@ Import-ModuleFile 'Bottleneck.ReportUtils.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.SystemPerformance.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.DeepScan.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Profiles.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.Wireshark.ps1')
 
 Import-ModuleFile 'Bottleneck.PDF.ps1'
 Import-ModuleFile 'Bottleneck.Baseline.ps1'
