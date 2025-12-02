@@ -126,7 +126,7 @@ function Test-BottleneckTasks {
 # Deep tier functions are now in Bottleneck.DeepScan.ps1
 # Bottleneck.Checks.ps1
 function Get-BottleneckChecks {
-    param([string]$Tier)
+    param([ValidateSet('Quick','Standard','Deep')][string]$Tier)
     $quick = @(
         'Test-BottleneckStorage',
         'Test-BottleneckPowerPlan',

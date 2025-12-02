@@ -64,7 +64,7 @@ function Test-BottleneckWindowsUpdateHealth {
         # Check for failed updates in event log
         $wuStart = (Get-Date).AddDays(-30)
         $wuFilter = @{ LogName='System'; ProviderName='Microsoft-Windows-WindowsUpdateClient'; Level=2; StartTime=$wuStart }
-        $failedUpdates = Get-WinEvent -FilterHashtable $wuFilter -MaxEvents 500 -ErrorAction SilentlyContinue
+        $failedUpdates = Get-SafeWinEvent -FilterHashtable $wuFilter -MaxEvents 500 -TimeoutSeconds 10
 
         $failedCount = if ($failedUpdates) { $failedUpdates.Count } else { 0 }
         if ($failedCount -gt 5) {

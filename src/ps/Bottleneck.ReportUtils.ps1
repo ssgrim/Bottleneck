@@ -1,13 +1,9 @@
 # Bottleneck.ReportUtils.ps1
 function Get-BottleneckEventLogSummary {
-    param([int]$Days = 7)
+    param([ValidateRange(1, 365)][int]$Days = 7)
     $since = (Get-Date).AddDays(-$Days)
     $filter = @{ StartTime = $since; LogName = 'System' }
-    if (Get-Command Get-SafeWinEvent -ErrorAction SilentlyContinue) {
-        $events = Get-SafeWinEvent -LogName 'System' -StartTime $since -MaxEvents 1000
-    } else {
-        $events = Get-WinEvent -FilterHashtable $filter -MaxEvents 1000 -ErrorAction SilentlyContinue
-    }
+    $events = Get-SafeWinEvent -FilterHashtable $filter -MaxEvents 1000 -TimeoutSeconds 15
     $errors = $events | Where-Object { $_.LevelDisplayName -eq 'Error' }
     $warnings = $events | Where-Object { $_.LevelDisplayName -eq 'Warning' }
     [PSCustomObject]@{
@@ -19,7 +15,7 @@ function Get-BottleneckEventLogSummary {
 }
 
 function Get-BottleneckPreviousScan {
-    param([string]$ReportsPath)
+    param([ValidateNotNullOrEmpty()][string]$ReportsPath)
     $files = Get-ChildItem -Path $ReportsPath -Filter 'scan-*.json' | Sort-Object LastWriteTime -Descending
     if ($files.Count -gt 0) {
         return Get-Content $files[0].FullName | ConvertFrom-Json

@@ -179,7 +179,7 @@ function Test-BottleneckFirewall {
         # Check for blocked connections in last 24 hours
         $fwStart = (Get-Date).AddHours(-24)
         $fwFilter = @{ LogName='Security'; Id=5157; StartTime=$fwStart }
-        $blockedEvents = Get-WinEvent -FilterHashtable $fwFilter -ErrorAction SilentlyContinue
+        $blockedEvents = Get-SafeWinEvent -FilterHashtable $fwFilter -MaxEvents 100 -TimeoutSeconds 10
         $blockedCount = if ($blockedEvents) { $blockedEvents.Count } else { 0 }
 
         # Check for third-party firewalls
