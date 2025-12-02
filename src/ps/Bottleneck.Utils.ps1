@@ -92,11 +92,11 @@ function Get-SafeWinEvent {
         # Use Invoke-WithTimeout if available, otherwise direct call
         if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
             return Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
-                Get-WinEvent -FilterHashtable $using:FilterHashtable -MaxEvents $using:MaxEvents -ErrorAction Stop
+                Get-WinEvent -FilterHashtable $using:FilterHashtable -MaxEvents $using:MaxEvents -ErrorAction SilentlyContinue
             }
         }
         else {
-            return Get-WinEvent -FilterHashtable $FilterHashtable -MaxEvents $MaxEvents -ErrorAction Stop
+            return Get-WinEvent -FilterHashtable $FilterHashtable -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
         }
     }
     catch [System.UnauthorizedAccessException] {
@@ -108,10 +108,6 @@ function Get-SafeWinEvent {
         return @()
     }
     catch [System.Exception] {
-        # Generic catch for other errors (invalid parameter, etc.)
-        if ($_.Exception.Message -match "No events were found") {
-            return @()
-        }
         Write-BottleneckLog "Error querying event log: $($_.Exception.Message)" -Level "WARN"
         return @()
     }

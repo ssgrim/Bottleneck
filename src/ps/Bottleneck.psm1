@@ -49,19 +49,18 @@ Import-ModuleFile 'Bottleneck.ReportUtils.ps1'
 # Consolidated hardware module (Battery, Memory, CPUThrottle, Disk, Thermal) - dot-sourced to keep in module scope
 . (Join-Path $PSScriptRoot 'Bottleneck.Hardware.ps1')
 
-Import-ModuleFile 'Bottleneck.PDF.ps1'
-Import-ModuleFile 'Bottleneck.Services.ps1'
-Import-ModuleFile 'Bottleneck.WindowsFeatures.ps1'
-Import-ModuleFile 'Bottleneck.Network.ps1'
-Import-ModuleFile 'Bottleneck.Security.ps1'
-Import-ModuleFile 'Bottleneck.UserExperience.ps1'
-Import-ModuleFile 'Bottleneck.DeepScan.ps1'
-Import-ModuleFile 'Bottleneck.SystemPerformance.ps1'
-# Import-ModuleFile 'Bottleneck.Alerts.ps1'  # TODO: File not in this directory
-Import-ModuleFile 'Bottleneck.Baseline.ps1'
-
-# Dot-source these files directly at script scope (not in function) to keep functions in module scope
+# Dot-source check modules at script scope to ensure proper function export
+. (Join-Path $PSScriptRoot 'Bottleneck.Services.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.WindowsFeatures.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.Network.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.Security.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.UserExperience.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.SystemPerformance.ps1')
+. (Join-Path $PSScriptRoot 'Bottleneck.DeepScan.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Profiles.ps1')
+
+Import-ModuleFile 'Bottleneck.PDF.ps1'
+Import-ModuleFile 'Bottleneck.Baseline.ps1'
 
 # Check admin rights
 $script:IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
