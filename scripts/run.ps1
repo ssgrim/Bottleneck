@@ -6,7 +6,8 @@ param(
     [switch] $Debug,
     [switch] $Verbose,
     [switch] $SkipElevation,    # Internal flag to prevent elevation loop
-    [string] $WiresharkCsv      # Optional: path to exported Wireshark CSV for analysis
+    [string] $WiresharkPath,    # Optional: path to Wireshark file (.pcapng, .json, .csv)
+    [string] $WiresharkDir      # Optional: directory with Wireshark captures; uses latest by time
 )
 
 # Check elevation (skip if already attempted)
@@ -15,7 +16,7 @@ if (-not $SkipElevation -and -not ([Security.Principal.WindowsPrincipal] [Securi
     $scriptPath = $PSCommandPath
     $argsList = @('-SkipElevation')  # Add flag to prevent re-elevation
     if ($All) { $argsList += '-All' }
-    if ($WiresharkCsv) { $argsList += @('-WiresharkCsv', ('"' + $WiresharkCsv + '"')) }
+    if ($WiresharkPath) { $argsList += @('-WiresharkPath', ('"' + $WiresharkPath + '"')) }
     if ($AI) { $argsList += '-AI' }
     if ($CollectLogs) { $argsList += '-CollectLogs' }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -165,10 +166,22 @@ if ($All -or (-not $PSBoundParameters.ContainsKey('All'))) {
 }
 
 # Optional: Analyze Wireshark CSV if provided
-if ($WiresharkCsv) {
-    Write-Host "Analyzing Wireshark capture: $WiresharkCsv" -ForegroundColor Cyan
+if ($WiresharkPath -or $WiresharkDir) {
+    if (-not $WiresharkPath) {
+        $latest = Get-LatestWiresharkCapture -Directory $WiresharkDir
+        if ($latest) { $WiresharkPath = $latest.FullName }
+    }
+    if (-not $WiresharkPath) {
+        Write-Host "⚠ No Wireshark capture found in '$WiresharkDir'" -ForegroundColor Yellow
+    }
+}
+
+if ($WiresharkPath) {
+    Write-Host "Analyzing Wireshark capture: $WiresharkPath" -ForegroundColor Cyan
     try {
-        $ws = Analyze-WiresharkCapture -Path $WiresharkCsv -ErrorAction Stop
+        $ext = [System.IO.Path]::GetExtension($WiresharkPath).TrimStart('.')
+        $fmt = if ($ext -eq 'pcapng') { 'pcapng' } elseif ($ext -eq 'json') { 'json' } else { 'csv' }
+        $ws = Analyze-WiresharkCapture -Path $WiresharkPath -Format $fmt -ErrorAction Stop
         if ($ws) {
             Write-Host ("Wireshark summary: packets={0}, drops={1}, avgLatency={2}ms, maxLatency={3}ms" -f $ws.Packets, $ws.Drops, $ws.AvgLatencyMs, $ws.MaxLatencyMs) -ForegroundColor Green
             try {
