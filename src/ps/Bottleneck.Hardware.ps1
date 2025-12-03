@@ -110,34 +110,34 @@ function Test-BottleneckCPUThrottle {
             $battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
             $isLaptop = ($null -ne $battery)
         } catch {}
-        
+
         # Adjust impact based on system type and actual throttling
-        $impact = if ($throttlePercent -gt 30 -or $thermalThrottle) { 
-            7 
-        } elseif ($throttlePercent -gt 20 -and $isLaptop) { 
+        $impact = if ($throttlePercent -gt 30 -or $thermalThrottle) {
+            7
+        } elseif ($throttlePercent -gt 20 -and $isLaptop) {
             4  # More tolerant for laptops
-        } elseif ($throttlePercent -gt 15) { 
-            5 
-        } else { 
-            2 
+        } elseif ($throttlePercent -gt 15) {
+            5
+        } else {
+            2
         }
         $confidence = 7
         $effort = 2
         $priority = 3
         $evidence = "Clock: $currentClockSpeed / $maxClockSpeed MHz (${throttlePercent}% throttle), Thermal: $thermalThrottle"
         $fixId = if ($isPowerSaver) { 'PowerPlanHighPerformance' } else { '' }
-        $msg = if ($throttlePercent -gt 30 -or $thermalThrottle) { 
-            'Significant CPU throttling detected. Check thermals or power settings.' 
-        } elseif ($throttlePercent -gt 20) { 
-            if ($isLaptop) { 
-                'Moderate CPU throttling (normal for laptops on battery).' 
-            } else { 
-                'Moderate CPU throttling. Consider checking thermals.' 
+        $msg = if ($throttlePercent -gt 30 -or $thermalThrottle) {
+            'Significant CPU throttling detected. Check thermals or power settings.'
+        } elseif ($throttlePercent -gt 20) {
+            if ($isLaptop) {
+                'Moderate CPU throttling (normal for laptops on battery).'
+            } else {
+                'Moderate CPU throttling. Consider checking thermals.'
             }
-        } elseif ($throttlePercent -gt 15) { 
-            'Minor CPU throttling detected.' 
-        } else { 
-            'CPU running at expected speed.' 
+        } elseif ($throttlePercent -gt 15) {
+            'Minor CPU throttling detected.'
+        } else {
+            'CPU running at expected speed.'
         }
 
         return New-BottleneckResult -Id 'CPUThrottle' -Tier 'Standard' -Category 'CPU Throttling' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg
@@ -230,12 +230,12 @@ function Test-BottleneckThermal {
     $cpu = Get-BottleneckCPUTemp
     $gpu = Get-BottleneckGPUTemp
     $disk = Get-BottleneckDiskTemp
-    
+
     # Build readable display values
     $cpuDisplay = if ($cpu) { "${cpu}°C" } else { "no sensor" }
     $gpuDisplay = if ($gpu) { "${gpu}°C" } else { "no sensor" }
     $diskDisplay = if ($disk) { "${disk}°C" } else { "no sensor" }
-    
+
     $impact = 2
     $confidence = if ($cpu -or $gpu -or $disk) { 8 } else { 3 }
     $effort = 2

@@ -3,34 +3,28 @@
 ## Quick Commands
 
 ```powershell
-# Unified full system scan
+# Full system scan (auto-elevates if needed)
 pwsh -NoLogo -NoProfile
 cd 'c:\Users\mrred\git\Bottleneck'
-./scripts/run.ps1 -All
+./scripts/run.ps1
 
 # Include latest Wireshark capture (auto-picks newest in folder)
-./scripts/run.ps1 -All -WiresharkDir '.\WireSharkLogs'
+./scripts/run.ps1 -WiresharkDir '.\WireSharkLogs'
 
 # Or target a specific capture file
-./scripts/run.ps1 -All -WiresharkPath 'C:\Path\to\Scan 3.json'
+./scripts/run.ps1 -WiresharkPath 'C:\Path\to\Scan 3.json'
 ```
 
 ## 🎯 Unified Workflow
 
-Profiles and tiers are deprecated. Use the unified `run.ps1 -All` flow and optionally pass Wireshark captures.
+The default scan runs all computer checks and generates a comprehensive HTML report. Optionally include Wireshark network analysis by pointing to your capture folder or file.
 
-### Available Profiles
+### Wireshark Integration
 
-| Profile             | Tier     | Network | Focus Areas                                 | Best For                              |
-| ------------------- | -------- | ------- | ------------------------------------------- | ------------------------------------- |
-| **DesktopGamer**    | Standard | 10min   | Thermal, GPU, Network, Performance          | Gaming PCs, high-performance desktops |
-| **RemoteWorker**    | Standard | 20min   | Network, Connectivity, Battery, Reliability | Laptops, home office, VPN users       |
-| **DeveloperLaptop** | Standard | 15min   | Disk, Memory, Services, Performance         | Dev workstations, multitasking        |
-| **ServerDefault**   | Deep     | 30min   | Services, Security, Updates, Reliability    | Windows Servers, production systems   |
-
-## Scan Overview
-
-The unified scan runs all computer checks and produces a full HTML report. Wireshark capture analysis adds network summary metrics.
+1. Run Wireshark to capture network traffic during slow performance
+2. Export as JSON: File → Export Packet Dissections → As JSON
+3. Run scan with capture: `./scripts/run.ps1 -WiresharkDir '.\WireSharkLogs'`
+4. Report includes network summary: packets, drops, latency metrics
 
 ## What's Checked?
 
@@ -207,8 +201,8 @@ Expected on systems with limited logging or without admin rights.
 
 ```powershell
 Import-Module .\src\ps\Bottleneck.psm1
-$results = Invoke-BottleneckScan -Tier Standard
-Invoke-BottleneckReport -Results $results -Tier Standard
+$results = Invoke-BottleneckScan
+Invoke-BottleneckReport -Results $results
 ```
 
 ### Filter High-Impact Issues
@@ -246,4 +240,4 @@ Get-Content .\Reports\bottleneck-$(Get-Date -Format 'yyyy-MM-dd').log -Tail 50
 
 ---
 
-**Quick Start:** `.\scripts\run-standard.ps1` → Open HTML report → Click "Get AI Help" for issues
+**Quick Start:** `.\scripts\run.ps1` → Open HTML report → Click "Get AI Help" for issues

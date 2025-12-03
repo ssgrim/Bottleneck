@@ -1,0 +1,15 @@
+{
+  "name": "comp-smoke",
+  "timestamp": "2025-12-02T16:19:07.7428052Z",
+  "hostname": "PAD",
+  "metrics": {
+    "HighImpact": 4,
+    "AvgScore": 10.32,
+    "MemoryFindings": 0,
+    "MaxScore": 28.0,
+    "CPUFindings": 0,
+    "DiskFindings": 2,
+    "ThermalFindings": 0,
+    "TotalFindings": 11
+  }
+}

@@ -61,27 +61,33 @@ A comprehensive Windows performance diagnostic and repair tool designed for IT p
    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
    ```
 
-## Unified Scan
+## Usage
 
-Run the full scan:
+### Basic Scan
+
+Run the full system scan (auto-elevates to admin if needed):
 
 ```powershell
 pwsh -NoLogo -NoProfile
 cd 'c:\Users\mrred\git\Bottleneck'
-./scripts/run.ps1 -All
+./scripts/run.ps1
 ```
 
-Include latest Wireshark capture from a folder (auto-picks newest `.json`, `.pcapng`, or `.csv`):
+### With Wireshark Analysis
+
+Include network analysis from your latest Wireshark capture (auto-picks newest `.json`, `.pcapng`, or `.csv`):
 
 ```powershell
-./scripts/run.ps1 -All -WiresharkDir '.\WireSharkLogs'
+./scripts/run.ps1 -WiresharkDir '.\WireSharkLogs'
 ```
 
 Or target a specific capture file:
 
 ```powershell
-./scripts/run.ps1 -All -WiresharkPath 'C:\Path\to\Scan 3.json'
+./scripts/run.ps1 -WiresharkPath 'C:\Path\to\Scan 3.json'
 ```
+
+**Note:** For `.pcapng` files, export to JSON from Wireshark (File → Export Packet Dissections → As JSON) or ensure `tshark` is in PATH.
 
 ## Export Logs
 
@@ -96,10 +102,11 @@ Or target a specific capture file:
 
 The resulting zip (e.g., `Reports/bottleneck-logs-YYYY-MM-DD_HH-MM-SS.zip`) is ignored by git and ready to share for analysis.
 
-### Deprecations
+### Notes
 
-- Tiered entry scripts (`run-quick.ps1`, `run-standard.ps1`, `run-deep.ps1`) and network monitor scripts are deprecated.
-- Use Wireshark for captures and include them via `-WiresharkDir` or `-WiresharkPath`.
+- **Legacy scripts removed**: Tier-based scripts (`run-quick.ps1`, `run-standard.ps1`, etc.) and built-in network monitoring have been retired.
+- **Wireshark integration**: Use Wireshark for network captures and include them in your scan via `-WiresharkDir` or `-WiresharkPath`.
+- **Default behavior**: Running `./scripts/run.ps1` with no parameters executes a full system scan.
 
 ### Manual Module Usage
 

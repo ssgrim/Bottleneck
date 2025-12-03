@@ -3,14 +3,14 @@
 function Invoke-BottleneckFixCleanup {
     [CmdletBinding()]
     param([switch]$Confirm, [switch]$Deep)
-    
+
     if ($Confirm) {
         Write-Host "Creating restore point..."
         Checkpoint-Computer -Description "Bottleneck Cleanup" -RestorePointType "MODIFY_SETTINGS" -ErrorAction SilentlyContinue
     }
-    
+
     $freedSpace = 0
-    
+
     # Clean temp files
     Write-Host "Cleaning temp files..." -ForegroundColor Cyan
     try {
@@ -21,7 +21,7 @@ function Invoke-BottleneckFixCleanup {
     } catch {
         Write-Warning "  Failed to clean temp files: $_"
     }
-    
+
     # Clean Windows temp
     Write-Host "Cleaning Windows temp..." -ForegroundColor Cyan
     try {
@@ -32,7 +32,7 @@ function Invoke-BottleneckFixCleanup {
     } catch {
         Write-Warning "  Failed to clean Windows temp: $_"
     }
-    
+
     if ($Deep) {
         # Clean Windows Update cache
         Write-Host "Cleaning Windows Update cache..." -ForegroundColor Cyan
@@ -46,7 +46,7 @@ function Invoke-BottleneckFixCleanup {
         } catch {
             Write-Warning "  Failed to clean update cache: $_"
         }
-        
+
         # Run Disk Cleanup
         Write-Host "Running Disk Cleanup utility..." -ForegroundColor Cyan
         try {
@@ -56,7 +56,7 @@ function Invoke-BottleneckFixCleanup {
             Write-Warning "  Disk Cleanup failed: $_"
         }
     }
-    
+
     Write-Host "`nTotal space freed: $([math]::Round($freedSpace, 2)) GB" -ForegroundColor Green
 }
 
@@ -75,26 +75,26 @@ function Invoke-BottleneckFixRetrim {
 function Set-BottleneckPowerPlanHighPerformance {
     [CmdletBinding()]
     param([switch]$Auto)
-    
+
     # Detect system type
     $isLaptop = $false
     try {
         $battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
         $isLaptop = ($null -ne $battery)
     } catch {}
-    
+
     if ($Auto -and $isLaptop) {
         Write-Host "Laptop detected. Setting to Balanced for battery life..." -ForegroundColor Cyan
         $guid = (powercfg /L | Select-String "Balanced" | ForEach-Object { $_.Line.Split()[3] })
-        if ($guid) { 
-            powercfg /S $guid 
+        if ($guid) {
+            powercfg /S $guid
             Write-Host "Power plan set to Balanced (recommended for laptops)" -ForegroundColor Green
         }
     } else {
         Write-Host "Setting power plan to High Performance..." -ForegroundColor Cyan
         $guid = (powercfg /L | Select-String "High performance" | ForEach-Object { $_.Line.Split()[3] })
-        if ($guid) { 
-            powercfg /S $guid 
+        if ($guid) {
+            powercfg /S $guid
             Write-Host "Power plan set to High Performance" -ForegroundColor Green
             if ($isLaptop) {
                 Write-Warning "Note: High Performance on laptop will reduce battery life"

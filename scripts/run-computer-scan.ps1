@@ -23,22 +23,45 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $modulePath = Join-Path $repoRoot 'src' 'ps' 'Bottleneck.psm1'
 if (-not (Test-Path $modulePath)) { throw "Module not found: $modulePath" }
 
+# Start transcript with date-based folder structure
+$timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
+$dateFolder = Get-Date -Format 'yyyy-MM-dd'
+$reportsDir = Join-Path $repoRoot "Reports" $dateFolder
+if (-not (Test-Path $reportsDir)) { New-Item -ItemType Directory -Path $reportsDir -Force | Out-Null }
+$logPath = Join-Path $reportsDir "run-computer-scan-$timestamp.log"
+Start-Transcript -Path $logPath -Append
+
 Write-Info 'Importing Bottleneck module...'
 Remove-Module Bottleneck -ErrorAction SilentlyContinue
-Import-Module $modulePath -Force
+try {
+    Import-Module $modulePath -Force -ErrorAction Stop -WarningAction SilentlyContinue
+    Write-Info "Module imported successfully."
+} catch {
+    Write-Warning "Module import had issues: $_"
+    Write-Info "Attempting to continue with available functions..."
+}
 
 Write-Info "Running Computer scan (Tier=$Tier)..."
-$results = Invoke-BottleneckScan -Tier $Tier
+try {
+    $results = Invoke-BottleneckScan -Tier $Tier
+} catch {
+    Write-Error "Scan failed: $_"
+    Stop-Transcript
+    exit 1
+}
 
 Write-Info 'Generating system report...'
 Invoke-BottleneckReport -Results $results -Tier $Tier
 
-$report = Get-ChildItem -Path (Join-Path $repoRoot 'Reports') -Filter 'Full-scan-*.html' -File -ErrorAction SilentlyContinue |
+# Look for report in date-based folder
+$report = Get-ChildItem -Path $reportsDir -Filter 'Full-scan-*.html' -File -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 if ($report) {
     Write-Info ("Report: " + $report.FullName)
     try { Start-Process -FilePath $report.FullName } catch { }
 } else {
-    Write-Info 'No Full-scan report found in Reports/.'
+    Write-Info "No Full-scan report found in $reportsDir"
 }
+
+Stop-Transcript

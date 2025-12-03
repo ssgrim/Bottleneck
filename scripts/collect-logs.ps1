@@ -27,8 +27,7 @@ if (-not $ReportsDirs -or ($ReportsDirs | ForEach-Object { Test-Path $_ } | Wher
 }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
-$zipName = "bottleneck-logs-$timestamp.zip"
-$zipPath = Join-Path $OutputDir $zipName
+$outputFolder = Join-Path $OutputDir "bottleneck-logs-$timestamp"
 
 Write-Info ("Collecting logs from: " + ($ReportsDirs -join '; '))
 
@@ -91,28 +90,21 @@ if (-not $files -or $files.Count -eq 0) {
 Write-Info ("Including files:" )
 $files | ForEach-Object { Write-Host (' - ' + $_.FullName) }
 
-# Create a temp staging directory
-$staging = Join-Path ([System.IO.Path]::GetTempPath()) ("bottleneck-logs-" + $timestamp)
-New-Item -ItemType Directory -Path $staging | Out-Null
+# Create output folder
+if (Test-Path $outputFolder) { Remove-Item $outputFolder -Recurse -Force }
+New-Item -ItemType Directory -Path $outputFolder | Out-Null
 
 foreach ($f in $files) {
-    Copy-Item -Path $f.FullName -Destination (Join-Path $staging $f.Name)
+    Copy-Item -Path $f.FullName -Destination (Join-Path $outputFolder $f.Name)
 }
 
-# Create zip
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipPath
-
-# Cleanup staging
-Remove-Item $staging -Recurse -Force
-
-Write-Info ("Created: $zipPath")
-Write-Info 'Share this zip for analysis or archive it.'
+Write-Info ("Created: $outputFolder")
+Write-Info 'Files collected and ready for review.'
 
 if ($CopyToClipboard) {
     try {
-        Set-Clipboard -Value $zipPath
-        Write-Info 'Zip path copied to clipboard.'
+        Set-Clipboard -Value $outputFolder
+        Write-Info 'Folder path copied to clipboard.'
     } catch {
         Write-Info ("Could not copy to clipboard: " + $_.Exception.Message)
     }
@@ -120,8 +112,8 @@ if ($CopyToClipboard) {
 
 if ($OpenFolder) {
     try {
-        Start-Process -FilePath explorer.exe -ArgumentList "/select,`"$zipPath`""
-        Write-Info 'Opened File Explorer to the created zip.'
+        Start-Process -FilePath explorer.exe -ArgumentList "`"$outputFolder`""
+        Write-Info 'Opened File Explorer to the collected files.'
     } catch {
         Write-Info ("Could not open File Explorer: " + $_.Exception.Message)
     }
