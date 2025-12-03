@@ -4,7 +4,10 @@
 param(
     [int]$DurationMinutes = 60,
     [int]$CheckIntervalSeconds = 5,
-    [string]$LogPath = "$PSScriptRoot\..\Reports\network-drop-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+    [string]$LogPath = "$PSScriptRoot\..\Reports\network-drop-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log",
+    [switch]$Classify,               # Classify drops as WLAN/LAN, WAN, or DNS
+    [switch]$CaptureWlanEvents,      # Include WLAN-AutoConfig event excerpts
+    [switch]$VerboseDiagnostics      # Print additional diagnostics per event
 )
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -34,6 +37,34 @@ $endTime = $startTime.AddMinutes($DurationMinutes)
 $dropCount = 0
 $wasConnected = $true
 $lastStatus = "Up"
+$lastBssid = $null
+$lastChannel = $null
+$classCounts = @{ WLAN=0; WAN=0; DNS=0; Unknown=0 }
+
+function Get-WlanInterfaceDetails {
+    try {
+        $raw = netsh wlan show interfaces | Out-String
+        $obj = [ordered]@{ SSID=$null; BSSID=$null; Signal=$null; Channel=$null }
+        foreach ($line in $raw -split "`r?`n") {
+            if ($line -match '^\s*SSID\s*:\s*(.+)$') { $obj.SSID = $Matches[1].Trim() }
+            elseif ($line -match '^\s*BSSID\s*:\s*(.+)$') { $obj.BSSID = $Matches[1].Trim() }
+            elseif ($line -match '^\s*Signal\s*:\s*(.+)$') { $obj.Signal = $Matches[1].Trim() }
+            elseif ($line -match '^\s*Channel\s*:\s*(.+)$') { $obj.Channel = $Matches[1].Trim() }
+        }
+        return ($obj | ConvertTo-Json | ConvertFrom-Json)
+    } catch { return $null }
+}
+
+function Test-NetworkPath {
+    param([string]$Target)
+    try { return [bool](Test-NetConnection -ComputerName $Target -InformationLevel Quiet -WarningAction SilentlyContinue -ErrorAction SilentlyContinue) }
+    catch { return $false }
+}
+
+function Test-DnsResolution {
+    param([string]$Name='www.msftconnecttest.com')
+    try { $r = Resolve-DnsName -Name $Name -ErrorAction Stop; return $true } catch { return $false }
+}
 
 while ((Get-Date) -lt $endTime) {
     $now = Get-Date
@@ -61,21 +92,35 @@ while ((Get-Date) -lt $endTime) {
         # Capture diagnostic data
         Write-Host "   📊 Capturing diagnostics..." -ForegroundColor Cyan
         
-        # WiFi signal quality
-        try {
-            $signal = netsh wlan show interfaces | Select-String -Pattern 'Signal'
-            Write-Host "   $signal" -ForegroundColor Gray
-        } catch {}
-        
-        # Recent WiFi events
-        try {
-            $events = Get-WinEvent -LogName System -MaxEvents 10 -ErrorAction SilentlyContinue | 
-                Where-Object { $_.ProviderName -match 'WLAN|Wireless|NetAdapter' -and $_.TimeCreated -gt $now.AddMinutes(-1) }
-            if ($events) {
-                Write-Host "   Recent Events:" -ForegroundColor Gray
-                $events | ForEach-Object { Write-Host "     $($_.TimeCreated.ToString('HH:mm:ss')) - $($_.Message.Substring(0, [Math]::Min(80, $_.Message.Length)))" -ForegroundColor DarkGray }
+        # WiFi interface details
+        $iface = Get-WlanInterfaceDetails
+        if ($iface) {
+            Write-Host "   SSID: $($iface.SSID)  BSSID: $($iface.BSSID)  Channel: $($iface.Channel)  Signal: $($iface.Signal)" -ForegroundColor Gray
+            if ($lastBssid -and $iface.BSSID -and ($lastBssid -ne $iface.BSSID)) {
+                Write-Host "   ↪ BSSID changed: $lastBssid → $($iface.BSSID)" -ForegroundColor Yellow
             }
-        } catch {}
+            if ($lastChannel -and $iface.Channel -and ($lastChannel -ne $iface.Channel)) {
+                Write-Host "   ↪ Channel changed: $lastChannel → $($iface.Channel)" -ForegroundColor Yellow
+            }
+            $lastBssid = $iface.BSSID
+            $lastChannel = $iface.Channel
+        }
+        
+        # WLAN-AutoConfig events (optional)
+        if ($CaptureWlanEvents) {
+            try {
+                $events = Get-WinEvent -LogName System -MaxEvents 20 -ErrorAction SilentlyContinue | 
+                    Where-Object { $_.ProviderName -match 'WLAN-AutoConfig|Netwtw|NetAdapter' -and $_.TimeCreated -gt $now.AddMinutes(-2) }
+                if ($events) {
+                    Write-Host "   Recent WLAN/Adapter Events:" -ForegroundColor Gray
+                    $events | ForEach-Object {
+                        $msg = $_.Message
+                        if ($msg.Length -gt 140) { $msg = $msg.Substring(0,140) + '…' }
+                        Write-Host ("     {0} [{1}] {2}" -f $_.TimeCreated.ToString('HH:mm:ss'), $_.Id, $msg) -ForegroundColor DarkGray
+                    }
+                }
+            } catch {}
+        }
         
         # Network statistics
         try {
@@ -84,6 +129,25 @@ while ((Get-Date) -lt $endTime) {
                 Write-Host "   Adapter Stats: Recv=$($stats.ReceivedBytes) Sent=$($stats.SentBytes) RecvErrors=$($stats.ReceivedPacketErrors)" -ForegroundColor Gray
             }
         } catch {}
+
+        # Classification (optional)
+        if ($Classify) {
+            $gw = $null
+            try {
+                $gw = (Get-NetIPConfiguration | Where-Object {$_.IPv4DefaultGateway} | Select-Object -First 1).IPv4DefaultGateway.NextHop
+            } catch {}
+            $gwOk = $false; $wan1Ok = $false; $wan2Ok = $false; $dnsOk = $false
+            if ($gw) { $gwOk = Test-NetworkPath -Target $gw }
+            $wan1Ok = Test-NetworkPath -Target '8.8.8.8'
+            $wan2Ok = Test-NetworkPath -Target '1.1.1.1'
+            $dnsOk = Test-DnsResolution
+            $label = 'Unknown'
+            if (-not $gwOk) { $label = 'WLAN' }
+            elseif ($gwOk -and (-not $wan1Ok -and -not $wan2Ok)) { $label = 'WAN' }
+            elseif (($wan1Ok -or $wan2Ok) -and (-not $dnsOk)) { $label = 'DNS' }
+            $classCounts[$label]++
+            Write-Host "   Classification: $label (GW:$gwOk WAN:$($wan1Ok -or $wan2Ok) DNS:$dnsOk)" -ForegroundColor Cyan
+        }
         
         Write-Host ""
         $wasConnected = $false
@@ -144,6 +208,11 @@ try {
 } catch {}
 
 Write-Host ""
+    if ($Classify) {
+        Write-Host "Classification Totals:" -ForegroundColor White
+        Write-Host ("  WLAN/LAN: {0}  |  WAN: {1}  |  DNS: {2}  |  Unknown: {3}" -f $classCounts.WLAN, $classCounts.WAN, $classCounts.DNS, $classCounts.Unknown) -ForegroundColor White
+        Write-Host ""
+    }
 Write-Host "💡 Recommendations:" -ForegroundColor Cyan
 
 if ($dropCount -gt 0) {
