@@ -7,7 +7,11 @@ param(
     [string]$LogPath = "$PSScriptRoot\..\Reports\network-drop-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log",
     [switch]$Classify,               # Classify drops as WLAN/LAN, WAN, or DNS
     [switch]$CaptureWlanEvents,      # Include WLAN-AutoConfig event excerpts
-    [switch]$VerboseDiagnostics      # Print additional diagnostics per event
+    [switch]$VerboseDiagnostics,     # Print additional diagnostics per event
+    [switch]$CapturePackets,         # Use pktmon to capture a ring buffer and export pcapng on each drop (requires admin)
+    [int]$PacketWindowSeconds = 30,  # Approximate window size around drop (depends on buffer size and traffic)
+    [int]$PktmonBufferMB = 64,       # pktmon buffer size (MB)
+    [int]$PktSize = 128              # pktmon per-packet capture size (bytes)
 )
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -32,6 +36,24 @@ if (-not $wifiAdapter) {
 Write-Host "Monitoring adapter: $($wifiAdapter.Name) ($($wifiAdapter.InterfaceDescription))" -ForegroundColor Green
 Write-Host ""
 
+# Optional: initialize pktmon packet capture
+if ($CapturePackets) {
+    $pktmonAvailable = [bool](Get-Command pktmon -ErrorAction SilentlyContinue)
+    if (-not $pktmonAvailable) {
+        Write-Host "(pktmon not found; skipping packet capture)" -ForegroundColor DarkYellow
+    } elseif (-not (Test-IsAdmin)) {
+        Write-Host "(not elevated; run as Administrator to enable pktmon captures)" -ForegroundColor DarkYellow
+    } else {
+        $pktStarted = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
+        if ($pktStarted) {
+            $pktmonEnabled = $true
+            Write-Host "📡 pktmon ring capture active (buffer ${PktmonBufferMB}MB, ${PktSize}B/packet)" -ForegroundColor DarkCyan
+        } else {
+            Write-Host "(failed to start pktmon; skipping packet capture)" -ForegroundColor DarkYellow
+        }
+    }
+}
+
 $startTime = Get-Date
 $endTime = $startTime.AddMinutes($DurationMinutes)
 $dropCount = 0
@@ -40,6 +62,41 @@ $lastStatus = "Up"
 $lastBssid = $null
 $lastChannel = $null
 $classCounts = @{ WLAN=0; WAN=0; DNS=0; Unknown=0 }
+$pktmonEnabled = $false
+$pktmonAvailable = $false
+$pktmonInterface = $null
+$capturesDir = Join-Path (Split-Path $LogPath -Parent) 'captures'
+if (-not (Test-Path $capturesDir)) { New-Item -ItemType Directory -Path $capturesDir -Force | Out-Null }
+
+function Test-IsAdmin { try { $id=[Security.Principal.WindowsIdentity]::GetCurrent(); $p=new-object Security.Principal.WindowsPrincipal($id); return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { return $false } }
+
+function Start-PktmonCapture {
+    param([int]$IfIndex,[int]$BufferMB,[int]$PktBytes)
+    try {
+        & pktmon stop | Out-Null
+        & pktmon filter remove | Out-Null
+        & pktmon filter add -i $IfIndex | Out-Null
+        & pktmon start --buffer $BufferMB --capture --pkt-size $PktBytes | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Stop-PktmonAndExport {
+    param([string]$OutPcapPath)
+    try {
+        & pktmon stop | Out-Null
+        # Default output ETL is PktMon.etl in CWD
+        $etl = Join-Path (Get-Location) 'PktMon.etl'
+        if (Test-Path $etl) {
+            & pktmon format $etl -o $OutPcapPath -f pcapng | Out-Null
+            Remove-Item $etl -Force -ErrorAction SilentlyContinue
+            return $true
+        }
+    } catch { }
+    return $false
+}
 
 function Get-WlanInterfaceDetails {
     try {
@@ -88,6 +145,22 @@ while ((Get-Date) -lt $endTime) {
         Write-Host "🔴 DROP DETECTED #$dropCount at $($now.ToString('HH:mm:ss'))" -ForegroundColor Red
         Write-Host "   Adapter Status: $($current.Status)" -ForegroundColor Yellow
         Write-Host "   Internet: $hasInternet" -ForegroundColor Yellow
+        
+        # If pktmon is enabled, stop and export capture around this drop
+        if ($pktmonEnabled) {
+            try {
+                $pcapName = "drop-$($now.ToString('yyyy-MM-dd_HH-mm-ss'))-#$dropCount.pcapng"
+                $pcapPath = Join-Path $capturesDir $pcapName
+                $ok = Stop-PktmonAndExport -OutPcapPath $pcapPath
+                if ($ok -and (Test-Path $pcapPath)) {
+                    Write-Host "   📁 Saved packet capture: $pcapPath" -ForegroundColor Cyan
+                } else {
+                    Write-Host "   (pktmon export failed)" -ForegroundColor DarkYellow
+                }
+            } catch { Write-Host "   (pktmon export error: $($_.Exception.Message))" -ForegroundColor DarkYellow }
+            # Restart ring buffer to capture subsequent events
+            $null = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
+        }
         
         # Capture diagnostic data
         Write-Host "   📊 Capturing diagnostics..." -ForegroundColor Cyan
@@ -234,4 +307,8 @@ if ($dropCount -gt 0) {
 
 Write-Host ""
 Write-Host "📁 Full log saved to: $LogPath" -ForegroundColor Cyan
+# Cleanup pktmon if running
+if ($pktmonEnabled) {
+    try { & pktmon stop | Out-Null } catch {}
+}
 Stop-Transcript
