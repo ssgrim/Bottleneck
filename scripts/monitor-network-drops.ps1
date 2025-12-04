@@ -36,38 +36,7 @@ if (-not $wifiAdapter) {
 Write-Host "Monitoring adapter: $($wifiAdapter.Name) ($($wifiAdapter.InterfaceDescription))" -ForegroundColor Green
 Write-Host ""
 
-# Optional: initialize pktmon packet capture
-if ($CapturePackets) {
-    $pktmonAvailable = [bool](Get-Command pktmon -ErrorAction SilentlyContinue)
-    if (-not $pktmonAvailable) {
-        Write-Host "(pktmon not found; skipping packet capture)" -ForegroundColor DarkYellow
-    } elseif (-not (Test-IsAdmin)) {
-        Write-Host "(not elevated; run as Administrator to enable pktmon captures)" -ForegroundColor DarkYellow
-    } else {
-        $pktStarted = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
-        if ($pktStarted) {
-            $pktmonEnabled = $true
-            Write-Host "📡 pktmon ring capture active (buffer ${PktmonBufferMB}MB, ${PktSize}B/packet)" -ForegroundColor DarkCyan
-        } else {
-            Write-Host "(failed to start pktmon; skipping packet capture)" -ForegroundColor DarkYellow
-        }
-    }
-}
-
-$startTime = Get-Date
-$endTime = $startTime.AddMinutes($DurationMinutes)
-$dropCount = 0
-$wasConnected = $true
-$lastStatus = "Up"
-$lastBssid = $null
-$lastChannel = $null
-$classCounts = @{ WLAN=0; WAN=0; DNS=0; Unknown=0 }
-$pktmonEnabled = $false
-$pktmonAvailable = $false
-$pktmonInterface = $null
-$capturesDir = Join-Path (Split-Path $LogPath -Parent) 'captures'
-if (-not (Test-Path $capturesDir)) { New-Item -ItemType Directory -Path $capturesDir -Force | Out-Null }
-
+# Helper functions (must be defined before use)
 function Test-IsAdmin { try { $id=[Security.Principal.WindowsIdentity]::GetCurrent(); $p=new-object Security.Principal.WindowsPrincipal($id); return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { return $false } }
 
 function Start-PktmonCapture {
@@ -137,6 +106,39 @@ function Test-NetworkPath {
 function Test-DnsResolution {
     param([string]$Name='www.msftconnecttest.com')
     try { $r = Resolve-DnsName -Name $Name -ErrorAction Stop; return $true } catch { return $false }
+}
+
+# Initialize state variables
+$startTime = Get-Date
+$endTime = $startTime.AddMinutes($DurationMinutes)
+$dropCount = 0
+$wasConnected = $true
+$lastStatus = "Up"
+$lastBssid = $null
+$lastChannel = $null
+$classCounts = @{ WLAN=0; WAN=0; DNS=0; Unknown=0 }
+$pktmonEnabled = $false
+$pktmonAvailable = $false
+$pktmonInterface = $null
+$capturesDir = Join-Path (Split-Path $LogPath -Parent) 'captures'
+if (-not (Test-Path $capturesDir)) { New-Item -ItemType Directory -Path $capturesDir -Force | Out-Null }
+
+# Optional: initialize pktmon packet capture
+if ($CapturePackets) {
+    $pktmonAvailable = [bool](Get-Command pktmon -ErrorAction SilentlyContinue)
+    if (-not $pktmonAvailable) {
+        Write-Host "(pktmon not found; skipping packet capture)" -ForegroundColor DarkYellow
+    } elseif (-not (Test-IsAdmin)) {
+        Write-Host "(not elevated; run as Administrator to enable pktmon captures)" -ForegroundColor DarkYellow
+    } else {
+        $pktStarted = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
+        if ($pktStarted) {
+            $pktmonEnabled = $true
+            Write-Host "📡 pktmon ring capture active (buffer ${PktmonBufferMB}MB, ${PktSize}B/packet)" -ForegroundColor DarkCyan
+        } else {
+            Write-Host "(failed to start pktmon; skipping packet capture)" -ForegroundColor DarkYellow
+        }
+    }
 }
 
 while ((Get-Date) -lt $endTime) {
