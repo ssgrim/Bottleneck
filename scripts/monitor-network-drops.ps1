@@ -85,14 +85,30 @@ function Start-PktmonCapture {
 
 function Stop-PktmonAndExport {
     param([string]$OutPcapPath)
+    $etlPath = $null
     try {
-        & pktmon stop | Out-Null
-        # Default output ETL is PktMon.etl in CWD
-        $etl = Join-Path (Get-Location) 'PktMon.etl'
-        if (Test-Path $etl) {
-            & pktmon format $etl -o $OutPcapPath -f pcapng | Out-Null
-            Remove-Item $etl -Force -ErrorAction SilentlyContinue
-            return $true
+        & pktmon stop 2>&1 | Out-Null
+        # Check common ETL locations
+        $etlCandidates = @(
+            (Join-Path (Get-Location) 'PktMon.etl'),
+            (Join-Path $env:TEMP 'PktMon.etl'),
+            (Join-Path $env:USERPROFILE 'PktMon.etl')
+        )
+        foreach ($etl in $etlCandidates) {
+            if (Test-Path $etl) {
+                $etlPath = $etl
+                break
+            }
+        }
+        if ($etlPath) {
+            $outDir = Split-Path -Parent $OutPcapPath
+            if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+            $fmt = & pktmon format $etlPath -o $OutPcapPath -f pcapng 2>&1
+            Start-Sleep -Milliseconds 500  # Wait for file write
+            if (Test-Path $OutPcapPath) {
+                Remove-Item $etlPath -Force -ErrorAction SilentlyContinue
+                return $true
+            }
         }
     } catch { }
     return $false
@@ -125,11 +141,11 @@ function Test-DnsResolution {
 
 while ((Get-Date) -lt $endTime) {
     $now = Get-Date
-    
+
     # Check adapter status
     $current = Get-NetAdapter -Name $wifiAdapter.Name -ErrorAction SilentlyContinue
     $isConnected = ($current -and $current.Status -eq 'Up')
-    
+
     # Check internet connectivity
     $hasInternet = $false
     try {
@@ -138,33 +154,43 @@ while ((Get-Date) -lt $endTime) {
     } catch {
         $hasInternet = $false
     }
-    
+
     # Detect drop (was connected, now not)
     if ($wasConnected -and (-not $isConnected -or -not $hasInternet)) {
         $dropCount++
         Write-Host "🔴 DROP DETECTED #$dropCount at $($now.ToString('HH:mm:ss'))" -ForegroundColor Red
         Write-Host "   Adapter Status: $($current.Status)" -ForegroundColor Yellow
         Write-Host "   Internet: $hasInternet" -ForegroundColor Yellow
-        
+
         # If pktmon is enabled, stop and export capture around this drop
         if ($pktmonEnabled) {
             try {
                 $pcapName = "drop-$($now.ToString('yyyy-MM-dd_HH-mm-ss'))-#$dropCount.pcapng"
                 $pcapPath = Join-Path $capturesDir $pcapName
+                Write-Host "   📡 Exporting pktmon capture..." -ForegroundColor Cyan
                 $ok = Stop-PktmonAndExport -OutPcapPath $pcapPath
-                if ($ok -and (Test-Path $pcapPath)) {
-                    Write-Host "   📁 Saved packet capture: $pcapPath" -ForegroundColor Cyan
+                Start-Sleep -Milliseconds 1000
+                if ((Test-Path $pcapPath) -and ((Get-Item $pcapPath).Length -gt 100)) {
+                    $size = (Get-Item $pcapPath).Length / 1KB
+                    Write-Host "   ✓ Packet capture saved: $pcapName ($([Math]::Round($size))KB)" -ForegroundColor Green
                 } else {
-                    Write-Host "   (pktmon export failed)" -ForegroundColor DarkYellow
+                    Write-Host "   ⚠️  Packet export incomplete; retrying..." -ForegroundColor DarkYellow
+                    Start-Sleep -Milliseconds 500
+                    if ((Test-Path $pcapPath)) {
+                        $size = (Get-Item $pcapPath).Length / 1KB
+                        Write-Host "   ✓ Packet capture saved: $pcapName ($([Math]::Round($size))KB)" -ForegroundColor Green
+                    } else {
+                        Write-Host "   (pktmon export not available or eth file missing)" -ForegroundColor DarkYellow
+                    }
                 }
             } catch { Write-Host "   (pktmon export error: $($_.Exception.Message))" -ForegroundColor DarkYellow }
             # Restart ring buffer to capture subsequent events
             $null = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
         }
-        
+
         # Capture diagnostic data
         Write-Host "   📊 Capturing diagnostics..." -ForegroundColor Cyan
-        
+
         # WiFi interface details
         $iface = Get-WlanInterfaceDetails
         if ($iface) {
@@ -178,11 +204,11 @@ while ((Get-Date) -lt $endTime) {
             $lastBssid = $iface.BSSID
             $lastChannel = $iface.Channel
         }
-        
+
         # WLAN-AutoConfig events (optional)
         if ($CaptureWlanEvents) {
             try {
-                $events = Get-WinEvent -LogName System -MaxEvents 20 -ErrorAction SilentlyContinue | 
+                $events = Get-WinEvent -LogName System -MaxEvents 20 -ErrorAction SilentlyContinue |
                     Where-Object { $_.ProviderName -match 'WLAN-AutoConfig|Netwtw|NetAdapter' -and $_.TimeCreated -gt $now.AddMinutes(-2) }
                 if ($events) {
                     Write-Host "   Recent WLAN/Adapter Events:" -ForegroundColor Gray
@@ -194,7 +220,7 @@ while ((Get-Date) -lt $endTime) {
                 }
             } catch {}
         }
-        
+
         # Network statistics
         try {
             $stats = Get-NetAdapterStatistics -Name $wifiAdapter.Name -ErrorAction SilentlyContinue
@@ -221,7 +247,7 @@ while ((Get-Date) -lt $endTime) {
             $classCounts[$label]++
             Write-Host "   Classification: $label (GW:$gwOk WAN:$($wan1Ok -or $wan2Ok) DNS:$dnsOk)" -ForegroundColor Cyan
         }
-        
+
         Write-Host ""
         $wasConnected = $false
     }
@@ -237,7 +263,7 @@ while ((Get-Date) -lt $endTime) {
         Write-Host "⚠️  Status changed: $lastStatus → $($current.Status) at $($now.ToString('HH:mm:ss'))" -ForegroundColor Yellow
         $lastStatus = $current.Status
     }
-    
+
     Start-Sleep -Seconds $CheckIntervalSeconds
 }
 
