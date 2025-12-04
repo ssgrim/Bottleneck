@@ -90,9 +90,10 @@ Write-Host "All jobs running. Waiting for monitor to complete ($DurationMinutes 
 Write-Host "Go about your normal tasks; drops will be captured." -ForegroundColor Gray
 Write-Host ""
 
-# Wait for monitor to complete
+# Wait for monitor to complete (with timeout cap for PowerShell limitation)
 if ($monitorJob) {
-    $null = $monitorJob | Wait-Process -Timeout ($DurationMinutes * 60 + 60) -ErrorAction SilentlyContinue
+    $timeoutSeconds = [Math]::Min($DurationMinutes * 60 + 60, 32767)
+    $null = $monitorJob | Wait-Process -Timeout $timeoutSeconds -ErrorAction SilentlyContinue
 }
 
 # Stop other jobs gracefully
