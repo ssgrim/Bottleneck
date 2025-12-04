@@ -70,14 +70,12 @@ if ($Wireshark) {
 # 3. Start elevated network drop monitor
 Write-Host "🔍 Starting network drop monitor (elevated)..." -ForegroundColor Cyan
 try {
+    $monitorCmd = @"
+cd '$repoRoot'
+.\scripts\monitor-network-drops.ps1 -DurationMinutes $DurationMinutes -CheckIntervalSeconds $CheckIntervalSeconds -Classify -CaptureWlanEvents -CapturePackets -PktmonBufferMB $PktmonBufferMB -PktSize $PktSize
+"@
     $monitorJob = Start-Process pwsh -Verb RunAs -PassThru -ArgumentList @(
-        "-NoExit", "-Command",
-        "cd '$repoRoot'; `
-         .\scripts\monitor-network-drops.ps1 `
-           -DurationMinutes $DurationMinutes `
-           -CheckIntervalSeconds $CheckIntervalSeconds `
-           -Classify -CaptureWlanEvents -CapturePackets `
-           -PktmonBufferMB $PktmonBufferMB -PktSize $PktSize"
+        "-NoExit", "-NoProfile", "-Command", $monitorCmd
     )
     $jobs += $monitorJob
     Write-Host "   ✓ Monitor PID: $($monitorJob.Id)" -ForegroundColor Green
