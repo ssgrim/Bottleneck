@@ -42,10 +42,10 @@ function Test-IsAdmin { try { $id=[Security.Principal.WindowsIdentity]::GetCurre
 function Start-PktmonCapture {
     param([int]$IfIndex,[int]$BufferMB,[int]$PktBytes)
     try {
-        & pktmon stop | Out-Null
-        & pktmon filter remove | Out-Null
-        & pktmon filter add -i $IfIndex | Out-Null
-        & pktmon start --buffer $BufferMB --capture --pkt-size $PktBytes | Out-Null
+        & pktmon stop 2>&1 | Out-Null
+        & pktmon filter remove 2>&1 | Out-Null
+        & pktmon filter add -i $IfIndex 2>&1 | Out-Null
+        & pktmon start --etw -p $PktBytes -s $BufferMB 2>&1 | Out-Null
         return $true
     } catch {
         return $false
