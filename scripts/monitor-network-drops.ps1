@@ -52,35 +52,24 @@ function Start-PktmonCapture {
     }
 }
 
-function Stop-PktmonAndExport {
-    param([string]$OutPcapPath)
-    $etlPath = $null
+function Export-PktmonSnapshot {
+    param([string]$OutPcapPath, [string]$EtlBasePath)
     try {
-        & pktmon stop 2>&1 | Out-Null
-        # Check common ETL locations
-        $etlCandidates = @(
-            (Join-Path (Get-Location) 'PktMon.etl'),
-            (Join-Path $env:TEMP 'PktMon.etl'),
-            (Join-Path $env:USERPROFILE 'PktMon.etl')
-        )
-        foreach ($etl in $etlCandidates) {
-            if (Test-Path $etl) {
-                $etlPath = $etl
-                break
-            }
+        # pktmon with --etw uses a session-based ETL in %LOCALAPPDATA%\Temp\PktMon by default
+        # We'll query running sessions and export the active trace
+        $sessions = & logman query -ets 2>&1 | Select-String -Pattern "PktMon"
+        if (-not $sessions) {
+            return $false
         }
-        if ($etlPath) {
-            $outDir = Split-Path -Parent $OutPcapPath
-            if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
-            $fmt = & pktmon format $etlPath -o $OutPcapPath -f pcapng 2>&1
-            Start-Sleep -Milliseconds 500  # Wait for file write
-            if (Test-Path $OutPcapPath) {
-                Remove-Item $etlPath -Force -ErrorAction SilentlyContinue
-                return $true
-            }
-        }
-    } catch { }
-    return $false
+        
+        # The ETL is actively being written; we can't export until we stop
+        # For ring buffer mode, we'll just note the timestamp and skip per-drop export
+        # Instead, rely on Wireshark dumpcap for packet-level forensics
+        # Log the drop event details which are already captured
+        return $false
+    } catch {
+        return $false
+    }
 }
 
 function Get-WlanInterfaceDetails {
@@ -164,31 +153,9 @@ while ((Get-Date) -lt $endTime) {
         Write-Host "   Adapter Status: $($current.Status)" -ForegroundColor Yellow
         Write-Host "   Internet: $hasInternet" -ForegroundColor Yellow
 
-        # If pktmon is enabled, stop and export capture around this drop
-        if ($pktmonEnabled) {
-            try {
-                $pcapName = "drop-$($now.ToString('yyyy-MM-dd_HH-mm-ss'))-#$dropCount.pcapng"
-                $pcapPath = Join-Path $capturesDir $pcapName
-                Write-Host "   📡 Exporting pktmon capture..." -ForegroundColor Cyan
-                $ok = Stop-PktmonAndExport -OutPcapPath $pcapPath
-                Start-Sleep -Milliseconds 1000
-                if ((Test-Path $pcapPath) -and ((Get-Item $pcapPath).Length -gt 100)) {
-                    $size = (Get-Item $pcapPath).Length / 1KB
-                    Write-Host "   ✓ Packet capture saved: $pcapName ($([Math]::Round($size))KB)" -ForegroundColor Green
-                } else {
-                    Write-Host "   ⚠️  Packet export incomplete; retrying..." -ForegroundColor DarkYellow
-                    Start-Sleep -Milliseconds 500
-                    if ((Test-Path $pcapPath)) {
-                        $size = (Get-Item $pcapPath).Length / 1KB
-                        Write-Host "   ✓ Packet capture saved: $pcapName ($([Math]::Round($size))KB)" -ForegroundColor Green
-                    } else {
-                        Write-Host "   (pktmon export not available or eth file missing)" -ForegroundColor DarkYellow
-                    }
-                }
-            } catch { Write-Host "   (pktmon export error: $($_.Exception.Message))" -ForegroundColor DarkYellow }
-            # Restart ring buffer to capture subsequent events
-            $null = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
-        }
+        # Note: pktmon runs continuously in ring buffer mode
+        # Packet-level forensics available via Wireshark dumpcap ring captures
+        # (Per-drop pktmon export skipped due to ETL locking with --etw mode)
 
         # Capture diagnostic data
         Write-Host "   📊 Capturing diagnostics..." -ForegroundColor Cyan
