@@ -28,7 +28,7 @@ try {
             } else {
                 # Disable via netsh (more reliable)
                 $desc = $wifiAdapter.InterfaceDescription
-                $devKey = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\*" | Get-ChildItem | 
+                $devKey = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\*" | Get-ChildItem |
                     Where-Object { $_.GetValue('DriverDesc') -match [regex]::Escape($desc) } | Select-Object -First 1
                 if ($devKey) {
                     $devKey.OpenSubKey('', $true) | ForEach-Object {

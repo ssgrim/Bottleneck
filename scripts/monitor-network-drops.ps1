@@ -37,17 +37,18 @@ Write-Host "Monitoring adapter: $($wifiAdapter.Name) ($($wifiAdapter.InterfaceDe
 Write-Host ""
 
 # Helper functions (must be defined before use)
-function Test-IsAdmin { try { $id=[Security.Principal.WindowsIdentity]::GetCurrent(); $p=new-object Security.Principal.WindowsPrincipal($id); return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { return $false } }
+function Test-IsAdmin { try { $id = [Security.Principal.WindowsIdentity]::GetCurrent(); $p = new-object Security.Principal.WindowsPrincipal($id); return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { return $false } }
 
 function Start-PktmonCapture {
-    param([int]$IfIndex,[int]$BufferMB,[int]$PktBytes)
+    param([int]$IfIndex, [int]$BufferMB, [int]$PktBytes)
     try {
         & pktmon stop 2>&1 | Out-Null
         & pktmon filter remove 2>&1 | Out-Null
         & pktmon filter add -i $IfIndex 2>&1 | Out-Null
         & pktmon start --etw -p $PktBytes -s $BufferMB 2>&1 | Out-Null
         return $true
-    } catch {
+    }
+    catch {
         return $false
     }
 }
@@ -61,13 +62,14 @@ function Export-PktmonSnapshot {
         if (-not $sessions) {
             return $false
         }
-        
+
         # The ETL is actively being written; we can't export until we stop
         # For ring buffer mode, we'll just note the timestamp and skip per-drop export
         # Instead, rely on Wireshark dumpcap for packet-level forensics
         # Log the drop event details which are already captured
         return $false
-    } catch {
+    }
+    catch {
         return $false
     }
 }
@@ -75,7 +77,7 @@ function Export-PktmonSnapshot {
 function Get-WlanInterfaceDetails {
     try {
         $raw = netsh wlan show interfaces | Out-String
-        $obj = [ordered]@{ SSID=$null; BSSID=$null; Signal=$null; Channel=$null }
+        $obj = [ordered]@{ SSID = $null; BSSID = $null; Signal = $null; Channel = $null }
         foreach ($line in $raw -split "`r?`n") {
             if ($line -match '^\s*SSID\s*:\s*(.+)$') { $obj.SSID = $Matches[1].Trim() }
             elseif ($line -match '^\s*BSSID\s*:\s*(.+)$') { $obj.BSSID = $Matches[1].Trim() }
@@ -83,7 +85,8 @@ function Get-WlanInterfaceDetails {
             elseif ($line -match '^\s*Channel\s*:\s*(.+)$') { $obj.Channel = $Matches[1].Trim() }
         }
         return ($obj | ConvertTo-Json | ConvertFrom-Json)
-    } catch { return $null }
+    }
+    catch { return $null }
 }
 
 function Test-NetworkPath {
@@ -93,7 +96,7 @@ function Test-NetworkPath {
 }
 
 function Test-DnsResolution {
-    param([string]$Name='www.msftconnecttest.com')
+    param([string]$Name = 'www.msftconnecttest.com')
     try { $r = Resolve-DnsName -Name $Name -ErrorAction Stop; return $true } catch { return $false }
 }
 
@@ -105,7 +108,7 @@ $wasConnected = $true
 $lastStatus = "Up"
 $lastBssid = $null
 $lastChannel = $null
-$classCounts = @{ WLAN=0; WAN=0; DNS=0; Unknown=0 }
+$classCounts = @{ WLAN = 0; WAN = 0; DNS = 0; Unknown = 0 }
 $pktmonEnabled = $false
 $pktmonAvailable = $false
 $pktmonInterface = $null
@@ -117,14 +120,17 @@ if ($CapturePackets) {
     $pktmonAvailable = [bool](Get-Command pktmon -ErrorAction SilentlyContinue)
     if (-not $pktmonAvailable) {
         Write-Host "(pktmon not found; skipping packet capture)" -ForegroundColor DarkYellow
-    } elseif (-not (Test-IsAdmin)) {
+    }
+    elseif (-not (Test-IsAdmin)) {
         Write-Host "(not elevated; run as Administrator to enable pktmon captures)" -ForegroundColor DarkYellow
-    } else {
+    }
+    else {
         $pktStarted = Start-PktmonCapture -IfIndex $wifiAdapter.ifIndex -BufferMB $PktmonBufferMB -PktBytes $PktSize
         if ($pktStarted) {
             $pktmonEnabled = $true
             Write-Host "📡 pktmon ring capture active (buffer ${PktmonBufferMB}MB, ${PktSize}B/packet)" -ForegroundColor DarkCyan
-        } else {
+        }
+        else {
             Write-Host "(failed to start pktmon; skipping packet capture)" -ForegroundColor DarkYellow
         }
     }
@@ -142,7 +148,8 @@ while ((Get-Date) -lt $endTime) {
     try {
         $ping = Test-NetConnection -ComputerName 8.8.8.8 -InformationLevel Quiet -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
         $hasInternet = $ping
-    } catch {
+    }
+    catch {
         $hasInternet = $false
     }
 
@@ -178,16 +185,17 @@ while ((Get-Date) -lt $endTime) {
         if ($CaptureWlanEvents) {
             try {
                 $events = Get-WinEvent -LogName System -MaxEvents 20 -ErrorAction SilentlyContinue |
-                    Where-Object { $_.ProviderName -match 'WLAN-AutoConfig|Netwtw|NetAdapter' -and $_.TimeCreated -gt $now.AddMinutes(-2) }
+                Where-Object { $_.ProviderName -match 'WLAN-AutoConfig|Netwtw|NetAdapter' -and $_.TimeCreated -gt $now.AddMinutes(-2) }
                 if ($events) {
                     Write-Host "   Recent WLAN/Adapter Events:" -ForegroundColor Gray
                     $events | ForEach-Object {
                         $msg = $_.Message
-                        if ($msg.Length -gt 140) { $msg = $msg.Substring(0,140) + '…' }
+                        if ($msg.Length -gt 140) { $msg = $msg.Substring(0, 140) + '…' }
                         Write-Host ("     {0} [{1}] {2}" -f $_.TimeCreated.ToString('HH:mm:ss'), $_.Id, $msg) -ForegroundColor DarkGray
                     }
                 }
-            } catch {}
+            }
+            catch {}
         }
 
         # Network statistics
@@ -196,14 +204,16 @@ while ((Get-Date) -lt $endTime) {
             if ($stats) {
                 Write-Host "   Adapter Stats: Recv=$($stats.ReceivedBytes) Sent=$($stats.SentBytes) RecvErrors=$($stats.ReceivedPacketErrors)" -ForegroundColor Gray
             }
-        } catch {}
+        }
+        catch {}
 
         # Classification (optional)
         if ($Classify) {
             $gw = $null
             try {
-                $gw = (Get-NetIPConfiguration | Where-Object {$_.IPv4DefaultGateway} | Select-Object -First 1).IPv4DefaultGateway.NextHop
-            } catch {}
+                $gw = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4DefaultGateway.NextHop
+            }
+            catch {}
             $gwOk = $false; $wan1Ok = $false; $wan2Ok = $false; $dnsOk = $false
             if ($gw) { $gwOk = Test-NetworkPath -Target $gw }
             $wan1Ok = Test-NetworkPath -Target '8.8.8.8'
@@ -257,7 +267,8 @@ try {
         Write-Host "Power Management:" -ForegroundColor White
         Write-Host "  Allow computer to turn off: $($power.AllowComputerToTurnOffDevice)" -ForegroundColor $(if ($power.AllowComputerToTurnOffDevice) { 'Red' } else { 'Green' })
     }
-} catch {}
+}
+catch {}
 
 # Driver info
 try {
@@ -267,20 +278,22 @@ try {
         Write-Host "  Version: $($driver.DriverVersion)" -ForegroundColor White
         Write-Host "  Date: $($driver.DriverDate)" -ForegroundColor White
     }
-} catch {}
+}
+catch {}
 
 # WiFi info
 try {
     Write-Host "WiFi Details:" -ForegroundColor White
     netsh wlan show interfaces | Select-String -Pattern 'SSID|Signal|Channel|Authentication|Cipher'
-} catch {}
+}
+catch {}
 
 Write-Host ""
-    if ($Classify) {
-        Write-Host "Classification Totals:" -ForegroundColor White
-        Write-Host ("  WLAN/LAN: {0}  |  WAN: {1}  |  DNS: {2}  |  Unknown: {3}" -f $classCounts.WLAN, $classCounts.WAN, $classCounts.DNS, $classCounts.Unknown) -ForegroundColor White
-        Write-Host ""
-    }
+if ($Classify) {
+    Write-Host "Classification Totals:" -ForegroundColor White
+    Write-Host ("  WLAN/LAN: {0}  |  WAN: {1}  |  DNS: {2}  |  Unknown: {3}" -f $classCounts.WLAN, $classCounts.WAN, $classCounts.DNS, $classCounts.Unknown) -ForegroundColor White
+    Write-Host ""
+}
 Write-Host "💡 Recommendations:" -ForegroundColor Cyan
 
 if ($dropCount -gt 0) {
