@@ -5,7 +5,12 @@
 		},
 		{
 			"path": "WireSharkLogs"
+		},
+		{
+			"path": "../../OneDrive/Documents/Project/Bottleneck/Other Ideas/Windows-Repair-Tool"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"powershell.cwd": "Bottleneck"
+	}
 }

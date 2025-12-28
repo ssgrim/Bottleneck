@@ -70,22 +70,21 @@ function Get-SafeWinEvent {
         if ($FilterHashtable.ContainsKey('StartTime')) {
             $startTime = $FilterHashtable['StartTime']
 
-            # Handle null or invalid datetime
+            # Handle null or invalid datetime - remove from filter
             if ($null -eq $startTime -or $startTime -eq [datetime]::MinValue) {
-                # Default to 7 days ago
-                $FilterHashtable['StartTime'] = (Get-Date).AddDays(-7)
+                $FilterHashtable.Remove('StartTime')
             }
             elseif ($startTime -is [string]) {
                 # Try to parse string to datetime
                 try {
                     $FilterHashtable['StartTime'] = [datetime]::Parse($startTime)
                 } catch {
-                    $FilterHashtable['StartTime'] = (Get-Date).AddDays(-7)
+                    $FilterHashtable.Remove('StartTime')
                 }
             }
             elseif ($startTime -gt (Get-Date)) {
-                # Future date, use 7 days ago instead
-                $FilterHashtable['StartTime'] = (Get-Date).AddDays(-7)
+                # Future date, remove instead of default
+                $FilterHashtable.Remove('StartTime')
             }
         }
 

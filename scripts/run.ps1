@@ -169,7 +169,7 @@ if ($All -or (-not $PSBoundParameters.ContainsKey('All'))) {
     Write-BottleneckDebug "Unified scan initiated" -Component "Run"
     $results = $null
     try {
-        $results = Invoke-BottleneckScan -Tier Standard -ErrorAction Stop
+        $results = Invoke-BottleneckScan -Tier Standard -ErrorAction Continue
     }
     catch {
         Write-Host "❌ Scan failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -181,8 +181,17 @@ if ($All -or (-not $PSBoundParameters.ContainsKey('All'))) {
         Write-Host "Generating report..." -ForegroundColor Cyan
         $Global:Bottleneck_EnableAI = $enableAI
         try {
-            Invoke-BottleneckReport -Results $results -Tier 'Standard' -ErrorAction Stop
+            Invoke-BottleneckReport -Results $results -Tier 'Standard' -ErrorAction Continue
             Write-Host "✓ Report generated successfully" -ForegroundColor Green
+
+            # Save to history
+            try {
+                Add-ScanToHistory -Results $results -Tier 'Standard' -Metadata @{ scanId = $scanId }
+                Write-Host "✓ Scan saved to history" -ForegroundColor Green
+            }
+            catch {
+                Write-Warning "Failed to save scan to history: $($_.Exception.Message)"
+            }
         }
         catch {
             Write-Host "❌ Report generation failed: $($_.Exception.Message)" -ForegroundColor Red

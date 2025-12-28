@@ -10,17 +10,13 @@ Describe 'Bottleneck module basics' {
     }
 
     It 'exports core commands' {
-        # Pester v5 syntax (v3 compatible with fallback)
+        # Pester v3 syntax
         $cmd = Get-Command Initialize-BottleneckDebug -ErrorAction SilentlyContinue
-        if (Get-Command Should -ParameterName Not -ErrorAction SilentlyContinue) {
-            $cmd | Should -Not -BeNullOrEmpty
-        } else {
-            $cmd | Should Not BeNullOrEmpty
-        }
+        $cmd | Should Not BeNullOrEmpty
 
-        (Get-Command Invoke-BottleneckHealthCheck -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
-        (Get-Command Save-BottleneckBaseline -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
-        (Get-Command Compare-ToBaseline -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
+        (Get-Command Invoke-BottleneckHealthCheck -ErrorAction SilentlyContinue) | Should Not BeNullOrEmpty
+        (Get-Command Save-BottleneckBaseline -ErrorAction SilentlyContinue) | Should Not BeNullOrEmpty
+        (Get-Command Compare-ToBaseline -ErrorAction SilentlyContinue) | Should Not BeNullOrEmpty
     }
 
     It 'saves and compares a baseline' {
@@ -31,15 +27,15 @@ Describe 'Bottleneck module basics' {
 
         $m1 = @{ latencyAvg = 60; successRate = 99.7 }
         $file = Save-BottleneckBaseline -Metrics $m1 -Name $name -Path $baseDir
-        Test-Path $file | Should -BeTrue
+        Test-Path $file | Should Be $true
 
         $m2 = @{ latencyAvg = 120; successRate = 99.0 }
         $c = Compare-ToBaseline -Metrics $m2 -Name $name -Path $baseDir
-        $c | Should -Not -BeNullOrEmpty
-        $c.comparison.ContainsKey('latencyAvg') | Should -BeTrue
+        $c | Should Not BeNullOrEmpty
+        $c.comparison.ContainsKey('latencyAvg') | Should Be $true
     }
 
     It 'runs health check without throwing' {
-        { Invoke-BottleneckHealthCheck -Verbose:$false } | Should -Not -Throw
+        { Invoke-BottleneckHealthCheck -Verbose:$false } | Should Not Throw
     }
 }

@@ -26,6 +26,11 @@ Import-ModuleFile 'Bottleneck.HealthCheck.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Performance.ps1')
 Import-ModuleFile 'Bottleneck.Logging.ps1'
 
+# Set module root for history
+$global:BottleneckModuleRoot = Split-Path $PSScriptRoot -Parent
+
+Import-ModuleFile 'Bottleneck.History.ps1'
+
 # Initialize logging (guarded)
 try {
     if (Get-Command Initialize-BottleneckLogging -ErrorAction SilentlyContinue) {
