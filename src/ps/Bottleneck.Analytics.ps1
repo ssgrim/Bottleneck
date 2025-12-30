@@ -461,6 +461,221 @@ function Find-PerformanceRegressions {
 
 #endregion
 
+#region Usage Pattern Detection
+
+function Get-UsagePattern {
+    <#
+    .SYNOPSIS
+    Detect system usage pattern from historical data
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$HistoricalScans,
+        
+        [Parameter(Mandatory)]
+        [PerformanceBaseline]$Baseline
+    )
+
+    $pattern = @{
+        Type = 'Unknown'
+        Confidence = 0
+        Characteristics = @()
+        Recommendations = @()
+    }
+
+    # Analyze resource usage patterns
+    $cpuScores = @()
+    $gpuScores = @()
+    $memoryScores = @()
+    $diskScores = @()
+    
+    foreach ($scan in $HistoricalScans) {
+        $cpu = $scan.results | Where-Object { $_.Category -eq 'CPU' } | Select-Object -First 1
+        $gpu = $scan.results | Where-Object { $_.Category -eq 'GPU' } | Select-Object -First 1
+        $memory = $scan.results | Where-Object { $_.Category -eq 'RAM' } | Select-Object -First 1
+        $disk = $scan.results | Where-Object { $_.Category -eq 'Disk' } | Select-Object -First 1
+        
+        if ($cpu) { $cpuScores += [double]$cpu.Score }
+        if ($gpu) { $gpuScores += [double]$gpu.Score }
+        if ($memory) { $memoryScores += [double]$memory.Score }
+        if ($disk) { $diskScores += [double]$disk.Score }
+    }
+
+    $avgCPU = if ($cpuScores.Count -gt 0) { ($cpuScores | Measure-Object -Average).Average } else { 0 }
+    $avgGPU = if ($gpuScores.Count -gt 0) { ($gpuScores | Measure-Object -Average).Average } else { 0 }
+    $avgMemory = if ($memoryScores.Count -gt 0) { ($memoryScores | Measure-Object -Average).Average } else { 0 }
+    $avgDisk = if ($diskScores.Count -gt 0) { ($diskScores | Measure-Object -Average).Average } else { 0 }
+
+    # Gaming Pattern: High GPU, moderate CPU, evening hours
+    if ($avgGPU -gt 30 -and $avgCPU -gt 20) {
+        $pattern.Type = 'Gaming'
+        $pattern.Confidence = 0.8
+        $pattern.Characteristics = @('High GPU usage', 'Elevated CPU during active periods')
+        $pattern.Recommendations = @(
+            'Enable High Performance power plan for maximum FPS',
+            'Update GPU drivers regularly',
+            'Ensure adequate cooling for sustained gaming sessions',
+            'Consider GPU upgrade if experiencing low frame rates',
+            'Optimize Windows Game Mode settings'
+        )
+    }
+    # Development Pattern: High CPU, high memory, moderate disk
+    elseif ($avgCPU -gt 25 -and $avgMemory -gt 30) {
+        $pattern.Type = 'Development'
+        $pattern.Confidence = 0.75
+        $pattern.Characteristics = @('Sustained CPU usage', 'High memory consumption', 'Frequent disk I/O')
+        $pattern.Recommendations = @(
+            'Upgrade to NVMe SSD for faster compilation',
+            'Increase RAM to 32GB+ for better IDE performance',
+            'Enable multi-core optimization in compiler settings',
+            'Exclude build directories from Windows Search indexing',
+            'Consider CPU upgrade to model with higher core count'
+        )
+    }
+    # Content Creation: Very high memory, high GPU, disk-intensive
+    elseif ($avgMemory -gt 40 -and ($avgGPU -gt 25 -or $avgDisk -gt 30)) {
+        $pattern.Type = 'ContentCreation'
+        $pattern.Confidence = 0.7
+        $pattern.Characteristics = @('Very high memory usage', 'GPU acceleration', 'Large file operations')
+        $pattern.Recommendations = @(
+            'Upgrade to 64GB+ RAM for 4K video editing',
+            'Use NVMe SSD for scratch disk/cache',
+            'Ensure GPU supports CUDA/OpenCL for rendering',
+            'Optimize pagefile settings for large projects',
+            'Consider RAID 0 for video project storage'
+        )
+    }
+    # Office/Light Use: Low resource usage overall
+    elseif ($avgCPU -lt 15 -and $avgMemory -lt 20 -and $avgGPU -lt 10) {
+        $pattern.Type = 'Office'
+        $pattern.Confidence = 0.85
+        $pattern.Characteristics = @('Low resource usage', 'Browser and productivity apps', 'Minimal GPU usage')
+        $pattern.Recommendations = @(
+            'Switch to Balanced power plan to save energy',
+            'Consider lighter antivirus solution',
+            'Disable unnecessary startup programs',
+            'Current hardware is adequate for workload',
+            'Focus on SSD if still using HDD'
+        )
+    }
+    # Server/24x7: Consistent load, no significant peaks
+    elseif ($Baseline.SampleCount -gt 20) {
+        $cpuVariance = if ($cpuScores.Count -gt 0) { ($cpuScores | ForEach-Object { [Math]::Pow($_ - $avgCPU, 2) } | Measure-Object -Average).Average } else { 0 }
+        if ($cpuVariance -lt 50) {  # Low variance = consistent load
+            $pattern.Type = 'Server'
+            $pattern.Confidence = 0.65
+            $pattern.Characteristics = @('Consistent resource usage', '24/7 operation', 'Background services')
+            $pattern.Recommendations = @(
+                'Enable server-optimized power plan',
+                'Implement monitoring and alerting',
+                'Schedule maintenance during low-usage windows',
+                'Ensure redundant cooling',
+                'Consider ECC RAM for data integrity'
+            )
+        }
+    }
+
+    # Default: General Use
+    if ($pattern.Type -eq 'Unknown') {
+        $pattern.Type = 'GeneralUse'
+        $pattern.Confidence = 0.5
+        $pattern.Characteristics = @('Mixed workload', 'Variable resource usage')
+        $pattern.Recommendations = @(
+            'Use Balanced power plan',
+            'Keep drivers updated',
+            'Regular maintenance and cleanup',
+            'Monitor resource usage to identify specific patterns'
+        )
+    }
+
+    return $pattern
+}
+
+#endregion
+
+#region Smart Recommendations
+
+function Get-SmartRecommendations {
+    <#
+    .SYNOPSIS
+    Generate context-aware optimization recommendations
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$CurrentScan,
+        
+        [PerformanceBaseline]$Baseline,
+        
+        [hashtable]$UsagePattern,
+        
+        [array]$Anomalies,
+        
+        [array]$Regressions
+    )
+
+    $recommendations = @()
+
+    # Critical issues first
+    foreach ($result in $CurrentScan) {
+        if ($result.Score -gt 45 -and $result.Impact -gt 7) {
+            $recommendations += @{
+                Priority = 'Critical'
+                Category = $result.Category
+                Issue = $result.Message
+                Action = "URGENT: Address $($result.Category) issue immediately"
+                Impact = 'High'
+            }
+        }
+    }
+
+    # Regression-based recommendations
+    if ($Regressions) {
+        foreach ($regression in $Regressions) {
+            $recommendations += @{
+                Priority = $regression.Severity
+                Category = $regression.Category
+                Issue = "Performance degraded $($regression.DegradationPercent)% since baseline"
+                Action = "Investigate changes since $($regression.StartDate)"
+                Impact = 'Medium'
+            }
+        }
+    }
+
+    # Anomaly-based recommendations
+    if ($Anomalies) {
+        foreach ($anomaly in $Anomalies) {
+            $recommendations += @{
+                Priority = 'High'
+                Category = $anomaly.Category
+                Issue = "Unusual $($anomaly.Type): $($anomaly.Description)"
+                Action = "Review recent changes to $($anomaly.Category)"
+                Impact = 'Medium'
+            }
+        }
+    }
+
+    # Usage pattern recommendations
+    if ($UsagePattern -and $UsagePattern.Recommendations.Count -gt 0) {
+        foreach ($rec in $UsagePattern.Recommendations | Select-Object -First 3) {
+            $recommendations += @{
+                Priority = 'Low'
+                Category = 'Optimization'
+                Issue = "Usage pattern: $($UsagePattern.Type)"
+                Action = $rec
+                Impact = 'Low'
+            }
+        }
+    }
+
+    # Sort by priority
+    $priorityOrder = @{ 'Critical' = 0; 'High' = 1; 'Medium' = 2; 'Low' = 3 }
+    $recommendations = $recommendations | Sort-Object { $priorityOrder[$_.Priority] }
+
+    return $recommendations
+}
+
+#endregion
+
 # Export functions
 Export-ModuleMember -Function @(
     'Get-StatisticalSummary',
@@ -470,5 +685,7 @@ Export-ModuleMember -Function @(
     'Get-Baseline',
     'Find-PerformanceAnomalies',
     'Get-DiskFailurePrediction',
-    'Find-PerformanceRegressions'
+    'Find-PerformanceRegressions',
+    'Get-UsagePattern',
+    'Get-SmartRecommendations'
 )
