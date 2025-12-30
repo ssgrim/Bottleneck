@@ -12,7 +12,8 @@ function Import-ModuleFile($name) {
     try {
         # Use script scope to ensure functions stay in module scope
         . $ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create((Get-Content $filePath -Raw)))
-    } catch {
+    }
+    catch {
         Write-Warning "Failed to load module file '$name': $_"
         Write-Warning "Error at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line)"
     }
@@ -29,16 +30,19 @@ Import-ModuleFile 'Bottleneck.Logging.ps1'
 # Set module root for history
 $global:BottleneckModuleRoot = Split-Path $PSScriptRoot -Parent
 
-Import-ModuleFile 'Bottleneck.History.ps1'
+# Load history functions - dot-source at script scope
+. (Join-Path $PSScriptRoot 'Bottleneck.History.ps1')
 
 # Initialize logging (guarded)
 try {
     if (Get-Command Initialize-BottleneckLogging -ErrorAction SilentlyContinue) {
         Initialize-BottleneckLogging
-    } else {
+    }
+    else {
         Write-Warning "Logging initialization unavailable; continuing without centralized log"
     }
-} catch {
+}
+catch {
     Write-Warning "Failed to initialize logging: $_"
 }
 
@@ -46,7 +50,6 @@ try {
 Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
 Import-ModuleFile 'Bottleneck.Checks.ps1'
 Import-ModuleFile 'Bottleneck.Fixes.ps1'
-Import-ModuleFile 'Bottleneck.ReportUtils.ps1'
 
 # Dot-source Report file directly at script scope to keep functions in module scope
 . (Join-Path $PSScriptRoot 'Bottleneck.Report.ps1')
@@ -55,7 +58,6 @@ Import-ModuleFile 'Bottleneck.ReportUtils.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Hardware.ps1')
 
 # Dot-source check modules at script scope to ensure proper function export
-. (Join-Path $PSScriptRoot 'Bottleneck.Services.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.WindowsFeatures.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Network.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Security.ps1')
@@ -65,7 +67,6 @@ Import-ModuleFile 'Bottleneck.ReportUtils.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Profiles.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Wireshark.ps1')
 
-Import-ModuleFile 'Bottleneck.PDF.ps1'
 Import-ModuleFile 'Bottleneck.Baseline.ps1'
 
 # Check admin rights
@@ -75,7 +76,8 @@ if (-not $script:IsAdmin) {
     if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
         Write-BottleneckLog "Running without admin privileges - some checks will be limited" -Level "WARN"
     }
-} else {
+}
+else {
     if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
         Write-BottleneckLog "Running with administrator privileges" -Level "INFO"
     }
@@ -91,7 +93,7 @@ if (-not (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue)) {
 if (-not (Get-Command New-BottleneckResult -ErrorAction SilentlyContinue)) {
     function New-BottleneckResult {
         param([string]$Id, [string]$Tier, [string]$Category, [int]$Impact, [int]$Confidence, [int]$Effort, [int]$Priority, [string]$Evidence, [string]$FixId, [string]$Message)
-        [PSCustomObject]@{ Id=$Id; Tier=$Tier; Category=$Category; Impact=$Impact; Confidence=$Confidence; Effort=$Effort; Priority=$Priority; Evidence=$Evidence; FixId=$FixId; Message=$Message; Score=[math]::Round(($Impact * $Confidence) / ($Effort + 1),2) }
+        [PSCustomObject]@{ Id = $Id; Tier = $Tier; Category = $Category; Impact = $Impact; Confidence = $Confidence; Effort = $Effort; Priority = $Priority; Evidence = $Evidence; FixId = $FixId; Message = $Message; Score = [math]::Round(($Impact * $Confidence) / ($Effort + 1), 2) }
     }
 }
 
@@ -115,7 +117,7 @@ if (-not (Get-Command Save-BottleneckBaseline -ErrorAction SilentlyContinue)) {
 function Invoke-BottleneckScan {
     [CmdletBinding()]
     param(
-        [ValidateSet('Quick','Standard','Deep')]
+        [ValidateSet('Quick', 'Standard', 'Deep')]
         [string]$Tier = 'Quick',
 
         [Parameter()]
@@ -146,31 +148,68 @@ function Invoke-BottleneckScan {
                 $checkDuration = ((Get-Date) - $checkStart).TotalMilliseconds
                 Write-BottleneckLog "Check $check completed in $([math]::Round($checkDuration))ms" -Level "DEBUG"
                 if ($result) { $results += $result }
-            } catch {
+            }
+            catch {
                 Write-BottleneckLog "Check $check failed: $_" -Level "ERROR" -CheckId $check
                 Write-Host "  ⚠ $check failed (non-critical, continuing)" -ForegroundColor Yellow
             }
         }
         Write-Progress -Activity "System Scan ($Tier)" -Completed
-    } else {
-        # Parallel execution with progress (same as sequential for now)
-        Write-BottleneckLog "Using sequential execution (parallel requires module scope refactoring)" -Level "INFO"
-        foreach ($check in $checks) {
-            $currentCheck++
-            $pct = [math]::Round(($currentCheck / $checks.Count) * 100)
-            Write-Progress -Activity "System Scan ($Tier)" -Status "Check $currentCheck of $($checks.Count): $check" -PercentComplete $pct
+    }
+    else {
+        # Parallel execution using Start-ThreadJob (PS7+)
+        Write-BottleneckLog "Using parallel execution with thread jobs" -Level "INFO"
+        Write-Progress -Activity "System Scan ($Tier)" -Status "Starting $($checks.Count) parallel thread jobs..." -PercentComplete 0
 
+        $jobs = @()
+        foreach ($check in $checks) {
+            $job = Start-ThreadJob -ScriptBlock {
+                param($checkName, $modulePath)
+                try {
+                    # Import the module in the thread job
+                    Import-Module (Join-Path $modulePath 'Bottleneck.psm1') -Force -ErrorAction Stop
+
+                    # Execute the check
+                    $result = & $checkName
+                    if ($result) { $result }
+                }
+                catch {
+                    # Return error info
+                    [PSCustomObject]@{
+                        Id        = 'Error'
+                        CheckName = $checkName
+                        Error     = $_.Exception.Message
+                        Failed    = $true
+                    }
+                }
+            } -ArgumentList $check, $PSScriptRoot
+            $jobs += $job
+        }
+
+        # Wait for all jobs to complete with progress
+        $completed = 0
+        while ($jobs | Where-Object { $_.State -eq 'Running' }) {
+            $running = ($jobs | Where-Object { $_.State -eq 'Running' }).Count
+            $completed = ($jobs | Where-Object { $_.State -ne 'Running' }).Count
+            $pct = [math]::Round(($completed / $checks.Count) * 100)
+            Write-Progress -Activity "System Scan ($Tier)" -Status "$running jobs running, $completed completed" -PercentComplete $pct
+            Start-Sleep -Milliseconds 500
+        }
+
+        # Collect results
+        $results = @()
+        foreach ($job in $jobs) {
             try {
-                $checkStart = Get-Date
-                $result = & $check
-                $checkDuration = ((Get-Date) - $checkStart).TotalMilliseconds
-                Write-BottleneckLog "Check $check completed in $([math]::Round($checkDuration))ms" -Level "DEBUG"
-                if ($result) { $results += $result }
-            } catch {
-                Write-BottleneckLog "Check $check failed: $_" -Level "ERROR" -CheckId $check
-                Write-Host "  ⚠ $check failed (non-critical, continuing)" -ForegroundColor Yellow
+                $jobResults = Receive-Job -Job $job -Wait -AutoRemoveJob
+                if ($jobResults) {
+                    $results += $jobResults | Where-Object { $_ -and -not $_.Failed }
+                }
+            }
+            catch {
+                Write-BottleneckLog "Failed to receive results from job: $_" -Level "WARN"
             }
         }
+
         Write-Progress -Activity "System Scan ($Tier)" -Completed
     }
 

@@ -73,17 +73,25 @@ function Get-HistoricalScans {
     Retrieve historical scans with optional filters
     #>
     param(
+        [string]$ReportsPath,
         [int]$Limit = 10,
         [string]$Tier,
         [DateTime]$Since,
         [DateTime]$Until
     )
 
-    if (-not (Test-Path $script:HistoryIndex)) {
+    if (-not $ReportsPath) {
+        $ReportsPath = Join-Path $global:BottleneckModuleRoot 'Reports'
+    }
+    
+    $historyPath = Join-Path $ReportsPath 'history'
+    $historyIndex = Join-Path $historyPath 'index.json'
+
+    if (-not (Test-Path $historyIndex)) {
         return @()
     }
 
-    $index = Get-Content $script:HistoryIndex | ConvertFrom-Json
+    $index = Get-Content $historyIndex | ConvertFrom-Json
     $scans = $index.scans
 
     if ($Tier) {
@@ -102,7 +110,7 @@ function Get-HistoricalScans {
 
     $results = @()
     foreach ($scan in $scans) {
-        $scanFile = Join-Path $script:HistoryPath $scan.file
+        $scanFile = Join-Path $historyPath $scan.file
         if (Test-Path $scanFile) {
             $data = Get-Content $scanFile | ConvertFrom-Json
             $results += $data
@@ -339,45 +347,61 @@ function Get-HistoricalTrendReport {
     Generate a trend report for historical scans
     #>
     param(
+        [string]$ReportsPath,
         [int]$Days = 30,
         [string]$OutputPath
     )
 
-    $scans = Get-HistoricalScans -Since ((Get-Date).AddDays(-$Days))
-    if ($scans.Count -lt 2) {
-        return "Insufficient historical data for trend analysis (need at least 2 scans)"
+    if (-not $ReportsPath) {
+        $ReportsPath = Join-Path $global:BottleneckModuleRoot 'Reports'
     }
 
-    $report = @"
-Historical Trend Report
-=======================
-Period: Last $Days days
-Total Scans: $($scans.Count)
-Date Range: $(($scans | Sort-Object timestamp | Select-Object -First 1).timestamp) to $(($scans | Sort-Object timestamp | Select-Object -Last 1).timestamp)
+    $scans = Get-HistoricalScans -ReportsPath $ReportsPath -Since ((Get-Date).AddDays(-$Days))
+    if ($scans.Count -lt 2) {
+        return $null  # Return null instead of string for easier handling
+    }
 
-Key Metrics Trends:
-"@
-
-    # Get unique checks
-    $allChecks = $scans | ForEach-Object { $_.results.Check } | Sort-Object -Unique
-
-    foreach ($check in $allChecks) {
-        $trend = Get-TrendAnalysis -MetricName $check -Days $Days
-        if ($trend.trend -ne 'insufficient-data') {
-            $report += @"
-
-$($check):
-  Direction: $($trend.direction)
-  Change: $($trend.change) ($($trend.change_percent)% over $($trend.data_points) data points)
-  Current: $($trend.last_value)
-"@
+    # Calculate trends for each category
+    $categories = @{}
+    foreach ($scan in $scans) {
+        foreach ($result in $scan.results) {
+            if (-not $result.Category) { continue }  # Skip results with null category
+            if (-not $categories.ContainsKey($result.Category)) {
+                $categories[$result.Category] = @()
+            }
+            $categories[$result.Category] += @{
+                Score = $result.Score
+                Timestamp = $scan.timestamp
+            }
         }
     }
 
-    if ($OutputPath) {
-        $report | Set-Content $OutputPath
-        Write-Host "Trend report saved to $OutputPath"
+    $trends = @()
+    foreach ($category in $categories.Keys) {
+        $data = $categories[$category] | Sort-Object Timestamp
+        if ($data.Count -ge 2) {
+            $first = $data[0].Score
+            $last = $data[-1].Score
+            $avg = ($data.Score | Measure-Object -Average).Average
+            $change = $last - $first
+            $changePercent = if ($first -ne 0) { [math]::Round(($change / $first) * 100, 1) } else { 0 }
+            
+            $trend = if ($changePercent -gt 10) { 'Worsening' } elseif ($changePercent -lt -10) { 'Improving' } else { 'Stable' }
+            
+            $trends += [PSCustomObject]@{
+                Category = $category
+                Trend = $trend
+                AverageScore = [math]::Round($avg, 1)
+                ChangePercent = $changePercent
+            }
+        }
     }
 
-    return $report
+    $summary = "System performance is $($trends | Where-Object { $_.Trend -eq 'Worsening' } | Measure-Object | Select-Object -ExpandProperty Count) categories worsening, $($trends | Where-Object { $_.Trend -eq 'Improving' } | Measure-Object | Select-Object -ExpandProperty Count) improving."
+
+    return [PSCustomObject]@{
+        TotalScans = $scans.Count
+        Trends = $trends
+        Summary = $summary
+    }
 }

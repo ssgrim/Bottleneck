@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="28" errors="0" failures="0" not-run="0" inconclusive="0" ignored="1" skipped="0" invalid="0" date="2025-12-28" time="20:41:00">
+  <environment cwd="C:\Users\mrred\git\Bottleneck" platform="Microsoft Windows 11 Home|C:\WINDOWS|\Device\Harddisk0\Partition3" user-domain="PAD" user="mrred" os-version="10.0.26200" clr-version="" machine-name="PAD" nunit-version="2.5.8.0" />
+  <culture-info current-culture="en-US" current-uiculture="en-US" />
+  <test-suite type="Powershell" name="Pester" executed="True" result="Ignored" success="True" time="223.2118" asserts="0">
+    <results>
+      <test-suite type="TestFixture" name="Bottleneck module basics" executed="True" result="Success" success="True" time="1.8698" asserts="0" description="Bottleneck module basics">
+        <results>
+          <test-case description="exports core commands" name="Bottleneck module basics.exports core commands" time="1.06" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="saves and compares a baseline" name="Bottleneck module basics.saves and compares a baseline" time="0.0525" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="runs health check without throwing" name="Bottleneck module basics.runs health check without throwing" time="0.7573" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Bottleneck Quick Scan" executed="True" result="Success" success="True" time="20.771" asserts="0" description="Bottleneck Quick Scan">
+        <results>
+          <test-case description="Should return results for all quick checks" name="Bottleneck Quick Scan.Should return results for all quick checks" time="20.771" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Core Check Functions" executed="True" result="Success" success="True" time="8.9073" asserts="0" description="Core Check Functions">
+        <results>
+          <test-case description="Returns a valid result object" name="Core Check Functions.Returns a valid result object" time="0.1448" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Reports free space in GB" name="Core Check Functions.Reports free space in GB" time="0.012" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns a valid result object" name="Core Check Functions.Returns a valid result object" time="0.1828" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns a valid result object" name="Core Check Functions.Returns a valid result object" time="0.0929" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns a valid result object" name="Core Check Functions.Returns a valid result object" time="0.2105" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Shows sensor availability" name="Core Check Functions.Shows sensor availability" time="0.1119" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns a valid result object" name="Core Check Functions.Returns a valid result object" time="4.2378" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Reports task counts" name="Core Check Functions.Reports task counts" time="3.9146" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Error Handling" executed="True" result="Success" success="True" time="2.0741" asserts="0" description="Error Handling">
+        <results>
+          <test-case description="Handles missing event logs gracefully" name="Error Handling.Handles missing event logs gracefully" time="0.9764" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns empty array when no events found" name="Error Handling.Returns empty array when no events found" time="0.9856" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Handles invalid class names" name="Error Handling.Handles invalid class names" time="0.1121" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Module Exports" executed="True" result="Success" success="True" time="1.6497" asserts="0" description="Module Exports">
+        <results>
+          <test-case description="Exports expected number of functions" name="Module Exports.Exports expected number of functions" time="1.2657" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Exports core check functions" name="Module Exports.Exports core check functions" time="0.2546" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Exports utility functions" name="Module Exports.Exports utility functions" time="0.0586" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Exports scan and report functions" name="Module Exports.Exports scan and report functions" time="0.0708" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Parameter Validation" executed="True" result="Success" success="True" time="2.8898" asserts="0" description="Parameter Validation">
+        <results>
+          <test-case description="Accepts valid tier values" name="Parameter Validation.Accepts valid tier values" time="0.1093" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Accepts valid timeout range" name="Parameter Validation.Accepts valid timeout range" time="2.7805" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Profiles" executed="True" result="Ignored" success="True" time="1.2465" asserts="0" description="Profiles">
+        <results>
+          <test-case description="Exports Get-BottleneckProfile and Invoke-BottleneckReport" name="Profiles.Exports Get-BottleneckProfile and Invoke-BottleneckReport" time="1.1693" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Lists known profile names" name="Profiles.Lists known profile names" time="0.028" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns expected fields for DesktopGamer" name="Profiles.Returns expected fields for DesktopGamer" time="0.0464" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="End-to-end filtering works for RemoteWorker" name="Profiles.End-to-end filtering works for RemoteWorker" time="0.0028" asserts="0" success="True" result="Ignored" executed="False" />
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="Scan Integration" executed="True" result="Success" success="True" time="183.8036" asserts="0" description="Scan Integration">
+        <results>
+          <test-case description="Completes without errors" name="Scan Integration.Completes without errors" time="17.0902" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns at least 6 results" name="Scan Integration.Returns at least 6 results" time="16.4776" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="All results have required properties" name="Scan Integration.All results have required properties" time="16.4247" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Returns more results than Quick" name="Scan Integration.Returns more results than Quick" time="133.8111" asserts="0" success="True" result="Success" executed="True" />
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>

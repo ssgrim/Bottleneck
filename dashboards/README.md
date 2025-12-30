@@ -5,6 +5,7 @@ This directory contains Grafana dashboard templates for visualizing Bottleneck d
 ## Available Dashboards
 
 ### 1. System Health Overview (`grafana-system-health.json`)
+
 - **Purpose**: Real-time monitoring of core system components
 - **Metrics**: CPU usage, memory usage, disk usage, network status
 - **Features**:
@@ -13,6 +14,7 @@ This directory contains Grafana dashboard templates for visualizing Bottleneck d
   - Time-series graphs for each component
 
 ### 2. Network Quality Dashboard (`grafana-network-quality.json`)
+
 - **Purpose**: Comprehensive network performance monitoring
 - **Metrics**: Latency, packet loss, download/upload speeds, DNS resolution
 - **Features**:
@@ -21,6 +23,7 @@ This directory contains Grafana dashboard templates for visualizing Bottleneck d
   - Issue classification pie chart
 
 ### 3. Performance Trends (`grafana-trends.json`)
+
 - **Purpose**: Long-term trend analysis and correlation studies
 - **Metrics**: Multi-metric performance correlations, degradation alerts
 - **Features**:
@@ -31,11 +34,13 @@ This directory contains Grafana dashboard templates for visualizing Bottleneck d
 ## Setup Instructions
 
 1. **Import Dashboards**:
+
    - Open Grafana and navigate to Dashboards → Import
    - Upload each JSON file or paste the JSON content
    - Configure the data source (InfluxDB or Prometheus)
 
 2. **Data Source Configuration**:
+
    - The dashboards expect metrics with the prefix `bottleneck_`
    - Use the `Export-HistoryForGrafana` function from `Bottleneck.History.ps1` to export data
    - For InfluxDB, use `Export-HistoryForInfluxDB`
@@ -62,6 +67,7 @@ After importing the dashboards:
 ## Customization
 
 The dashboard templates can be customized by:
+
 - Modifying panel queries to match your metric naming conventions
 - Adding additional panels for custom metrics
 - Adjusting thresholds and alert conditions
