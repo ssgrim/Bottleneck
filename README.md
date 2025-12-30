@@ -4,19 +4,13 @@ A comprehensive Windows performance diagnostic and repair tool designed for IT p
 
 ## ✨ Features
 
-### 🎯 Three Scan Tiers
-- **Quick Scan** (6 checks, ~13s) - Essential diagnostics: Storage, Power, Startup, Network, RAM, CPU
-- **Standard Scan** (46 checks, ~51s) - Comprehensive analysis including:
-  - 🌡️ **Thermal & Hardware**: CPU/GPU/System temperatures, fan speeds, battery health, disk SMART
-  - 💻 **System Performance**: Real-time CPU/memory utilization, stuck processes, Java heap monitoring
-  - 🔒 **Security**: Antivirus health, Windows updates, firewall status, port security
-  - 🌐 **Network**: DNS, adapters, bandwidth, VPN, connectivity diagnostics
-  - 🎨 **User Experience**: Boot time, app launch performance, UI responsiveness, performance trends
-- **Deep Scan** (52 checks, ~90s) - Advanced diagnostics:
-  - ETW tracing, full SMART analysis, SFC/DISM integrity checks
-  - Event log pattern analysis, background process audit, hardware upgrade recommendations
+### 🎯 Unified Scan
+
+- **Full System Scan** runs all computer checks by default and generates a full HTML report.
+- Optional **Wireshark Analysis**: pass a capture file or folder to include network summary (packets, drops, latency).
 
 ### 📊 Professional Reporting
+
 - **HTML Reports** with executive summary and color-coded severity scoring
 - **Smart Recommendations Engine** with priority categorization (Critical/High/Medium/Low)
 - **AI Troubleshooting Integration** - One-click help via ChatGPT, Copilot, or Gemini with pre-filled diagnostic context
@@ -24,6 +18,7 @@ A comprehensive Windows performance diagnostic and repair tool designed for IT p
 - **Multi-Location Saving** - Reports auto-saved to Documents, OneDrive, and project folder
 
 ### 🛠️ Built-in Fixes
+
 - Power plan optimization
 - Disk cleanup and defragmentation
 - Memory diagnostics
@@ -31,6 +26,7 @@ A comprehensive Windows performance diagnostic and repair tool designed for IT p
 - One-click fixes with confirmation prompts
 
 ### ⚡ Performance Optimizations
+
 - **CIM Query Caching** - Eliminates redundant WMI queries (2-3s savings)
 - **Timeout Protection** - Prevents event log query hangs with 10-15s limits
 - **Comprehensive Logging** - DEBUG/INFO/WARN/ERROR levels with timing metrics
@@ -48,11 +44,13 @@ A comprehensive Windows performance diagnostic and repair tool designed for IT p
 ### Installation
 
 1. **Install PowerShell 7+** (if not already installed):
+
    ```powershell
    winget install Microsoft.PowerShell
    ```
 
 2. **Clone or download this repository**:
+
    ```powershell
    git clone https://github.com/yourusername/bottleneck.git
    cd bottleneck
@@ -63,23 +61,52 @@ A comprehensive Windows performance diagnostic and repair tool designed for IT p
    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
    ```
 
-### Usage
+## Usage
 
-Navigate to the `scripts` folder and run:
+### Basic Scan
+
+Run the full system scan (auto-elevates to admin if needed):
 
 ```powershell
-# Quick diagnostic (6 checks, ~13 seconds)
-.\run-quick.ps1
-
-# Standard diagnostic (46 checks, ~51 seconds) - RECOMMENDED
-.\run-standard.ps1
-
-# Deep diagnostic (52 checks, ~90 seconds)
-.\run-deep.ps1
-
-# Long-running network monitor (for intermittent connectivity issues)
-.\run-network-monitor.ps1
+pwsh -NoLogo -NoProfile
+cd 'c:\Users\mrred\git\Bottleneck'
+./scripts/run.ps1
 ```
+
+### With Wireshark Analysis
+
+Include network analysis from your latest Wireshark capture (auto-picks newest `.json`, `.pcapng`, or `.csv`):
+
+```powershell
+./scripts/run.ps1 -WiresharkDir '.\WireSharkLogs'
+```
+
+Or target a specific capture file:
+
+```powershell
+./scripts/run.ps1 -WiresharkPath 'C:\Path\to\Scan 3.json'
+```
+
+**Note:** For `.pcapng` files, export to JSON from Wireshark (File → Export Packet Dissections → As JSON) or ensure `tshark` is in PATH.
+
+## Export Logs
+
+- VS Code task: Run `Collect Bottleneck logs` to bundle the latest network monitor outputs and reports into a timestamped zip under `Reports/`.
+- PowerShell:
+  - Latest of each type:
+    - `pwsh -NoLogo -NoProfile -Command "Push-Location '$PWD'; & scripts/collect-logs.ps1; Pop-Location"`
+  - Include everything:
+    - `pwsh -NoLogo -NoProfile -Command "Push-Location '$PWD'; & scripts/collect-logs.ps1 -IncludeAll; Pop-Location"`
+  - Custom directories:
+    - `pwsh -NoLogo -NoProfile -Command "Push-Location '$PWD'; & scripts/collect-logs.ps1 -ReportsDirs @('.\\Reports','.\\bottleneck\\Reports') -IncludeAll; Pop-Location"`
+
+The resulting zip (e.g., `Reports/bottleneck-logs-YYYY-MM-DD_HH-MM-SS.zip`) is ignored by git and ready to share for analysis.
+
+### Notes
+
+- **Legacy scripts removed**: Tier-based scripts (`run-quick.ps1`, `run-standard.ps1`, etc.) and built-in network monitoring have been retired.
+- **Wireshark integration**: Use Wireshark for network captures and include them in your scan via `-WiresharkDir` or `-WiresharkPath`.
+- **Default behavior**: Running `./scripts/run.ps1` with no parameters executes a full system scan.
 
 ### Manual Module Usage
 
@@ -110,10 +137,8 @@ bottleneck/
 │   ├── Bottleneck.SystemPerformance.ps1  # CPU/Memory/Fan/Temp monitoring
 │   └── [20+ specialized modules]
 ├── scripts/                     # Convenience scripts
-│   ├── run-quick.ps1
-│   ├── run-standard.ps1
-│   ├── run-deep.ps1
-│   └── run-network-monitor.ps1
+│   ├── run.ps1                  # Unified entry script
+│   └── [deprecated] legacy helpers
 ├── Reports/                     # Scan reports & logs
 ├── docs/                        # Documentation
 ├── tests/                       # Test files
@@ -141,6 +166,7 @@ Quick Scan Results:
 ## 🤖 AI Troubleshooting
 
 For high-impact issues (score > 5), reports include "Get AI Help" buttons that automatically:
+
 1. Open your preferred AI assistant (ChatGPT, Copilot, Gemini)
 2. Pre-fill a diagnostic prompt with:
    - Issue description and evidence
@@ -152,11 +178,12 @@ For high-impact issues (score > 5), reports include "Get AI Help" buttons that a
 ### Adding a New Check
 
 1. Create a check function in the appropriate module (or create a new one):
+
 ```powershell
 function Test-BottleneckMyCheck {
     # Your diagnostic logic
     $issue = Get-SomeData
-    
+
     return New-BottleneckResult `
         -Id 'MyCheck' `
         -Tier 'Standard' `
@@ -172,6 +199,7 @@ function Test-BottleneckMyCheck {
 ```
 
 2. Add to `Bottleneck.Checks.ps1` in the appropriate tier:
+
 ```powershell
 $standard = $quick + @(
     # ... existing checks ...
@@ -180,6 +208,7 @@ $standard = $quick + @(
 ```
 
 3. Add recommendations to `Bottleneck.Report.ps1`:
+
 ```powershell
 'MyCheck' { $recommendedSteps = 'Your fix instructions here.' }
 ```
@@ -187,17 +216,21 @@ $standard = $quick + @(
 ## 🐛 Troubleshooting
 
 ### "Scripts are disabled on this system"
+
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
 ### "Some checks require administrator privileges"
+
 Right-click PowerShell 7 and select "Run as Administrator" for full functionality.
 
 ### "No fan sensors detected"
+
 This is normal for many systems. Install [OpenHardwareMonitor](https://openhardwaremonitor.org/) or [HWiNFO](https://www.hwinfo.com/) for detailed sensor monitoring.
 
 ### Event log errors
+
 Some event log queries may fail without admin rights or on systems with limited logging enabled. This is expected behavior.
 
 ## 📊 Performance Notes
@@ -211,6 +244,7 @@ Some event log queries may fail without admin rights or on systems with limited 
 ## 🤝 Contributing
 
 Contributions welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-check`)
 3. Commit your changes (`git commit -m 'Add amazing check'`)
@@ -238,3 +272,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with ❤️ for IT professionals and power users who want their systems running at peak performance.**
+\n\n## Phase 6: Advanced Alert Fusion\nSee PHASE6-PLAN.md for objectives and usage.

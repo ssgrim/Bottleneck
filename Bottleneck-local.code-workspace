@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "WireSharkLogs"
+		},
+		{
+			"path": "../../OneDrive/Documents/Project/Bottleneck/Other Ideas/Windows-Repair-Tool"
+		}
+	],
+	"settings": {
+		"powershell.cwd": "Bottleneck"
+	}
+}

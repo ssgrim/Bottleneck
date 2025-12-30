@@ -1,4 +1,5 @@
-# Bottleneck .gitignore
+# Exported log bundles
+Reports/*.zip# Bottleneck .gitignore
 
 # Reports and logs
 Reports/*.html
@@ -46,6 +47,11 @@ out/
 
 # Node modules (if using any JS tools)
 node_modules/
+
+# Network capture files
+WireSharkLogs/
+*.pcapng
+*.pcap
 
 # Package management
 *.nupkg

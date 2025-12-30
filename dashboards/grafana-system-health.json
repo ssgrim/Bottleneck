@@ -1,0 +1,127 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Bottleneck - System Health Overview",
+    "tags": ["bottleneck", "system", "health"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU Usage %",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"CPU\"}",
+            "legendFormat": "CPU Load %"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Memory Usage %",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"RAM\"}",
+            "legendFormat": "Memory Usage %"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Disk Usage %",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"Disk\"}",
+            "legendFormat": "Disk Usage %"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Network Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"Network\"}",
+            "legendFormat": "Network Score"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "System Health Score",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "avg(bottleneck_check_score)",
+            "legendFormat": "Overall Health"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Critical Issues",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{severity=\"Critical\"}",
+            "legendFormat": "{{check}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      }
+    ],
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5m",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

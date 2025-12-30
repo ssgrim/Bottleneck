@@ -1,0 +1,18 @@
+{
+  "name": "net-smoke",
+  "timestamp": "2025-12-02T16:16:30.5812652Z",
+  "hostname": "PAD",
+  "metrics": {
+    "SuccessPercent": 100.0,
+    "PacketLossPercent": 0.0,
+    "MaxDropSec": 0.0,
+    "MinResponseMs": 42.0,
+    "Drops": 0,
+    "IspIssues": 0,
+    "DnsFailures": 0,
+    "RouterIssues": 0,
+    "MaxResponseMs": 195.0,
+    "AvgResponseMs": 75.4,
+    "AvgDropSec": 0.0
+  }
+}

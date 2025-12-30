@@ -1,0 +1,9 @@
+{
+  "name": "ci-smoke",
+  "timestamp": "2025-12-29T02:37:17.9627771Z",
+  "hostname": "PAD",
+  "metrics": {
+    "latencyAvg": 60,
+    "successRate": 99.7
+  }
+}

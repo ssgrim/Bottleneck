@@ -1,0 +1,161 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Bottleneck - Network Quality Dashboard",
+    "tags": ["bottleneck", "network", "quality"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Network Latency (ms)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_network_latency",
+            "legendFormat": "Latency (ms)"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Packet Loss %",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_packet_loss",
+            "legendFormat": "Packet Loss %"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Download Speed (Mbps)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_download_speed",
+            "legendFormat": "Download (Mbps)"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Upload Speed (Mbps)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_upload_speed",
+            "legendFormat": "Upload (Mbps)"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Network Quality Score",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"Network\"}",
+            "legendFormat": "Network Score"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Connection Drops",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bottleneck_connection_drops",
+            "legendFormat": "Drops"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 7,
+        "title": "DNS Resolution Time (ms)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bottleneck_dns_resolution_time",
+            "legendFormat": "DNS Time (ms)"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 8,
+        "title": "Network Issues by Type",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "bottleneck_network_issue_count",
+            "legendFormat": "{{issue_type}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      }
+    ],
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5m",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

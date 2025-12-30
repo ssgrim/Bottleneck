@@ -87,7 +87,8 @@ function Test-BottleneckAV {
 
 function Test-BottleneckTasks {
     try {
-        $tasks = Get-ScheduledTask | Where-Object { $_.State -eq 'Ready' -or $_.State -eq 'Running' }
+        # Consider only enabled, non-hidden tasks
+        $tasks = Get-ScheduledTask | Where-Object { $_.State -ne 'Disabled' -and ($_.Hidden -eq $false -or $_.Hidden -eq $null) }
         $count = $tasks.Count
 
         # Check for failed tasks
@@ -98,7 +99,10 @@ function Test-BottleneckTasks {
             $taskInfo = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue
             if ($taskInfo) {
                 # Check last run result (0 = success)
-                if ($taskInfo.LastTaskResult -ne 0 -and $taskInfo.LastTaskResult -ne $null) {
+                # Only consider failures within the last 72 hours to avoid stale noise
+                $recentWindow = (Get-Date).AddHours(-72)
+                $lastRunTime = $taskInfo.LastRunTime
+                if ($lastRunTime -and ($lastRunTime -gt $recentWindow) -and $taskInfo.LastTaskResult -ne 0 -and $taskInfo.LastTaskResult -ne $null) {
                     $failedTasks += $task.TaskName
                 }
 
@@ -115,7 +119,7 @@ function Test-BottleneckTasks {
         $priority = 5
         $evidence = "Total: $count, Failed: $($failedTasks.Count), Heavy: $($heavyTasks.Count)"
         $fixId = ''
-        $msg = if ($failedTasks.Count -gt 5) { 'Multiple scheduled tasks have failed.' } elseif ($count -gt 50) { 'Too many scheduled tasks.' } else { 'Scheduled tasks normal.' }
+        $msg = if ($failedTasks.Count -gt 5) { 'Multiple scheduled tasks have recently failed.' } elseif ($count -gt 50) { 'Too many scheduled tasks.' } else { 'Scheduled tasks normal.' }
 
         return New-BottleneckResult -Id 'Tasks' -Tier 'Standard' -Category 'Tasks' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg
     } catch {
@@ -126,7 +130,7 @@ function Test-BottleneckTasks {
 # Deep tier functions are now in Bottleneck.DeepScan.ps1
 # Bottleneck.Checks.ps1
 function Get-BottleneckChecks {
-    param([string]$Tier)
+    param([ValidateSet('Quick','Standard','Deep')][string]$Tier)
     $quick = @(
         'Test-BottleneckStorage',
         'Test-BottleneckPowerPlan',
@@ -192,7 +196,22 @@ function Get-BottleneckChecks {
 function Test-BottleneckStorage {
     $systemDrive = "$env:SystemDrive\\"
     $drive = Get-PSDrive -PSProvider 'FileSystem' | Where-Object { $_.Root -eq $systemDrive }
-    $freeGB = [math]::Round($drive.Free/1GB,2)
+
+    if (-not $drive) {
+        # Fallback to CIM if PSDrive lookup fails
+        try {
+            $logical = Get-CachedCimInstance -ClassName Win32_LogicalDisk -ErrorAction Stop | Where-Object { $_.DeviceID -eq $env:SystemDrive }
+            if ($logical) {
+                $freeGB = [math]::Round(($logical.FreeSpace/1GB),2)
+            } else {
+                $freeGB = 0
+            }
+        } catch {
+            $freeGB = 0
+        }
+    } else {
+        $freeGB = [math]::Round(($drive.Free/1GB),2)
+    }
     $impact = if ($freeGB -lt 10) { 8 } else { 2 }
     $confidence = 9
     $effort = 2
@@ -317,4 +336,77 @@ function Test-BottleneckBrowser {
     $fixId = ''
     $msg = if ($total -gt 10) { 'Too many browser extensions.' } else { 'Browser extension load normal.' }
     return New-BottleneckResult -Id 'Browser' -Tier 'Standard' -Category 'Browser' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg
+}
+
+function Test-BottleneckServiceHealth {
+    try {
+        # Get failed services (suppress permission errors for protected services)
+        $services = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Stopped' -and $_.StartType -eq 'Automatic' }
+        $failedCount = $services.Count
+
+        # Check for slow-starting services from event log
+        $svcStart = (Get-Date).AddDays(-7)
+        $svcFilter = @{ LogName='System'; ProviderName='Service Control Manager'; Id=7000,7001,7011; StartTime=$svcStart }
+        $slowServices = Get-SafeWinEvent -FilterHashtable $svcFilter -MaxEvents 100 -TimeoutSeconds 10
+        $slowCount = if ($slowServices) { $slowServices.Count } else { 0 }
+
+        $impact = if ($failedCount -gt 5 -or $slowCount -gt 10) { 7 } elseif ($failedCount -gt 0 -or $slowCount -gt 0) { 4 } else { 2 }
+        $confidence = 8
+        $effort = 2
+        $priority = 3
+        $evidence = "Failed services: $failedCount, Slow starts (7 days): $slowCount"
+        $fixId = if ($failedCount -gt 0) { 'RestartServices' } else { '' }
+        $msg = if ($failedCount -gt 5) { 'Multiple services have failed to start.' } elseif ($failedCount -gt 0) { 'Some services are not running.' } else { 'All automatic services running.' }
+
+        return New-BottleneckResult -Id 'ServiceHealth' -Tier 'Standard' -Category 'Service Health' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg
+    } catch {
+        return $null
+    }
+}
+
+function Test-BottleneckStartupImpact {
+    try {
+        # Check startup programs from Task Manager data
+        $startupApps = Get-CimInstance Win32_StartupCommand
+        $highImpact = @()
+
+        # Check registry for startup impact ratings
+        $paths = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run',
+            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'
+        )
+
+        $totalStartup = 0
+        foreach ($path in $paths) {
+            if (Test-Path $path) {
+                $items = Get-ItemProperty $path -ErrorAction SilentlyContinue
+                if ($items) {
+                    $totalStartup += ($items.PSObject.Properties | Where-Object { $_.Name -notmatch 'PS' }).Count
+                }
+            }
+        }
+
+        # Estimate high impact (apps known to slow startup)
+        $knownSlowApps = @('Adobe', 'iTunes', 'Skype', 'Steam', 'Discord', 'Spotify')
+        foreach ($app in $startupApps) {
+            foreach ($slow in $knownSlowApps) {
+                if ($app.Command -match $slow) {
+                    $highImpact += $app.Name
+                }
+            }
+        }
+
+        $impact = if ($highImpact.Count -gt 5) { 7 } elseif ($highImpact.Count -gt 2) { 5 } else { 2 }
+        $confidence = 7
+        $effort = 2
+        $priority = 3
+        $evidence = "Total startup items: $totalStartup, High impact: $($highImpact.Count)"
+        $fixId = ''
+        $msg = if ($highImpact.Count -gt 5) { 'Multiple high-impact startup apps detected.' } elseif ($highImpact.Count -gt 2) { 'Some high-impact startup apps found.' } else { 'Startup impact acceptable.' }
+
+        return New-BottleneckResult -Id 'StartupImpact' -Tier 'Standard' -Category 'Startup Impact' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg
+    } catch {
+        return $null
+    }
 }
