@@ -52,8 +52,10 @@
     - TCP/IP stack reset, startup program optimization
     - Event log cleanup
   - [x] Fix execution history tracking with JSON logging
-  - [ ] HTML report integration with "Apply Fix" buttons
-  - [ ] Integration with main diagnostic workflow
+  - [x] HTML report integration with "Apply Fix" buttons
+  - [x] Modal dialogs with fix descriptions and PowerShell commands
+  - [ ] Direct fix execution from HTML (requires elevated browser permissions)
+  - [ ] Fleet-wide remediation dashboard
 
 - [ ] Parallel execution implementation (using Start-ThreadJob for PS7+)
   - [x] Updated to use Start-ThreadJob instead of Start-Job for better module function access
