@@ -186,13 +186,10 @@ function Test-BottleneckEventLog {
         $patterns = @()
 
         foreach ($logName in $logs) {
-            # Get critical errors from last 30 days
-            $errors = Invoke-WithTimeout -TimeoutSeconds 15 -ScriptBlock {
-                $start = (Get-Date).AddDays(-30)
-                $filter = @{ Level=1,2; StartTime=$start }
-                if ($using:logName) { $filter['LogName'] = $using:logName } else { $filter['LogName'] = 'System' }
-                Get-WinEvent -FilterHashtable $filter -MaxEvents 500 -ErrorAction SilentlyContinue
-            }
+            # Get critical errors from last 30 days (resilient to null/invalid StartTime and access errors)
+            $start = (Get-Date).AddDays(-30)
+            $filter = @{ Level = 1, 2; StartTime = $start; LogName = $logName }
+            $errors = Get-SafeWinEvent -FilterHashtable $filter -MaxEvents 500 -TimeoutSeconds 15
 
             if ($errors) {
                 $criticalErrors += $errors
