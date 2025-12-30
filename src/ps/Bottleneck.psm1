@@ -157,24 +157,43 @@ function Invoke-BottleneckScan {
         Write-Progress -Activity "System Scan ($Tier)" -Completed
     }
     else {
-        # Parallel execution using Start-ThreadJob (PS7+)
-        Write-BottleneckLog "Using parallel execution with thread jobs" -Level "INFO"
-        Write-Progress -Activity "System Scan ($Tier)" -Status "Starting $($checks.Count) parallel thread jobs..." -PercentComplete 0
+        # Parallel execution with bounded concurrency (PS7+)
+        $maxConcurrency = switch ($Tier) {
+            'Quick'    { 2 }
+            'Standard' { 4 }
+            Default    { 6 }
+        }
+
+        Write-BottleneckLog "Using parallel execution (max $maxConcurrency jobs)" -Level "INFO"
+        Write-Progress -Activity "System Scan ($Tier)" -Status "Starting parallel jobs..." -PercentComplete 0
 
         $jobs = @()
+        $results = @()
+        $submitted = 0
+        $completed = 0
+
         foreach ($check in $checks) {
+            # throttle submissions
+            while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $maxConcurrency) {
+                $ready = Receive-Job -Job ($jobs | Where-Object { $_.State -ne 'Running' }) -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
+                if ($ready) {
+                    $results += ($ready | Where-Object { $_ -and -not $_.Failed })
+                }
+                $jobs = $jobs | Where-Object { $_.State -eq 'Running' }
+                $completed = $results.Count
+                $pct = [math]::Round(($completed / $checks.Count) * 100)
+                Write-Progress -Activity "System Scan ($Tier)" -Status "Throttling: $($jobs.Count) running" -PercentComplete $pct
+            }
+
+            $submitted++
             $job = Start-ThreadJob -ScriptBlock {
                 param($checkName, $modulePath)
                 try {
-                    # Import the module in the thread job
                     Import-Module (Join-Path $modulePath 'Bottleneck.psm1') -Force -ErrorAction Stop
-
-                    # Execute the check
                     $result = & $checkName
                     if ($result) { $result }
                 }
                 catch {
-                    # Return error info
                     [PSCustomObject]@{
                         Id        = 'Error'
                         CheckName = $checkName
@@ -182,32 +201,20 @@ function Invoke-BottleneckScan {
                         Failed    = $true
                     }
                 }
-            } -ArgumentList $check, $PSScriptRoot
+            } -ArgumentList $check, $PSScriptRoot -ErrorAction SilentlyContinue
             $jobs += $job
         }
 
-        # Wait for all jobs to complete with progress
-        $completed = 0
-        while ($jobs | Where-Object { $_.State -eq 'Running' }) {
-            $running = ($jobs | Where-Object { $_.State -eq 'Running' }).Count
-            $completed = ($jobs | Where-Object { $_.State -ne 'Running' }).Count
+        # Drain remaining jobs
+        while ($jobs.Count -gt 0) {
+            $ready = Receive-Job -Job $jobs -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
+            if ($ready) {
+                $results += ($ready | Where-Object { $_ -and -not $_.Failed })
+            }
+            $jobs = $jobs | Where-Object { $_.State -eq 'Running' }
+            $completed = $results.Count
             $pct = [math]::Round(($completed / $checks.Count) * 100)
-            Write-Progress -Activity "System Scan ($Tier)" -Status "$running jobs running, $completed completed" -PercentComplete $pct
-            Start-Sleep -Milliseconds 500
-        }
-
-        # Collect results
-        $results = @()
-        foreach ($job in $jobs) {
-            try {
-                $jobResults = Receive-Job -Job $job -Wait -AutoRemoveJob
-                if ($jobResults) {
-                    $results += $jobResults | Where-Object { $_ -and -not $_.Failed }
-                }
-            }
-            catch {
-                Write-BottleneckLog "Failed to receive results from job: $_" -Level "WARN"
-            }
+            Write-Progress -Activity "System Scan ($Tier)" -Status "$($jobs.Count) running, $completed completed" -PercentComplete $pct
         }
 
         Write-Progress -Activity "System Scan ($Tier)" -Completed
