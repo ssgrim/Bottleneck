@@ -388,10 +388,11 @@ function Save-FixExecution {
     
     $history = @()
     if (Test-Path $historyPath) {
-        $history = Get-Content $historyPath -Raw | ConvertFrom-Json
+        $historyJson = Get-Content $historyPath -Raw | ConvertFrom-Json
+        $history = @($historyJson)
     }
 
-    $history += @{
+    $newEntry = @{
         fix_id = $Execution.FixId
         timestamp = $Execution.Timestamp.ToString('o')
         user_approved = $Execution.UserApproved
@@ -404,6 +405,7 @@ function Save-FixExecution {
         error_details = $Execution.ErrorDetails
     }
 
+    $history += $newEntry
     $history | ConvertTo-Json -Depth 10 | Set-Content $historyPath
     Write-Verbose "Logged execution to: $historyPath"
 }
@@ -504,6 +506,277 @@ function Initialize-BuiltInFixes {
     $fix.Rollback = {
         # Network adapters will auto-reconnect
         Write-Host "Network adapters will reconnect automatically" -ForegroundColor Yellow
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Power Plan Optimization
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'power-plan-high-performance'
+    $fix.Name = 'Switch to High Performance Power Plan'
+    $fix.Description = 'Change power plan to High Performance for better CPU and disk performance'
+    $fix.Category = [FixCategory]::Performance
+    $fix.Risk = [RiskLevel]::Low
+    $fix.RequiresApproval = $true
+    $fix.RequiresReboot = $false
+    $fix.IsReversible = $true
+    $fix.EstimatedDurationSec = 5
+    $fix.CheckIds = @('CPU', 'Performance')
+    $fix.Prerequisites = @('Admin')
+    $fix.PreCheck = {
+        $current = powercfg /getactivescheme
+        return @{ current_plan = $current }
+    }
+    $fix.Execute = {
+        # Get High Performance GUID
+        $highPerfGuid = (powercfg /list | Select-String 'High performance').ToString() -replace '.*Power Scheme GUID:\s+([a-f0-9-]+).*', '$1'
+        if ($highPerfGuid) {
+            powercfg /setactive $highPerfGuid
+            return @{ plan = 'HighPerformance'; guid = $highPerfGuid }
+        } else {
+            throw "High Performance power plan not found"
+        }
+    }
+    $fix.PostCheck = {
+        $current = powercfg /getactivescheme
+        return @{ current_plan = $current }
+    }
+    $fix.Rollback = {
+        $balancedGuid = (powercfg /list | Select-String 'Balanced').ToString() -replace '.*Power Scheme GUID:\s+([a-f0-9-]+).*', '$1'
+        if ($balancedGuid) {
+            powercfg /setactive $balancedGuid
+        }
+    }
+    $fix.Metadata = @{
+        saved_plan = $null
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Windows Defender Definition Update
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'defender-update-definitions'
+    $fix.Name = 'Update Windows Defender Definitions'
+    $fix.Description = 'Force update of Windows Defender virus definitions'
+    $fix.Category = [FixCategory]::Security
+    $fix.Risk = [RiskLevel]::Low
+    $fix.RequiresApproval = $false
+    $fix.RequiresReboot = $false
+    $fix.IsReversible = $false
+    $fix.EstimatedDurationSec = 60
+    $fix.CheckIds = @('WindowsDefender', 'Antivirus')
+    $fix.Prerequisites = @('Internet')
+    $fix.Execute = {
+        Update-MpSignature -ErrorAction Stop
+        return @{ status = 'updated' }
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Clear Windows Update Cache
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'clear-windows-update-cache'
+    $fix.Name = 'Clear Windows Update Cache'
+    $fix.Description = 'Clear Windows Update download cache to fix update issues'
+    $fix.Category = [FixCategory]::Maintenance
+    $fix.Risk = [RiskLevel]::Medium
+    $fix.RequiresApproval = $true
+    $fix.RequiresReboot = $false
+    $fix.IsReversible = $false
+    $fix.EstimatedDurationSec = 45
+    $fix.CheckIds = @('WindowsUpdate')
+    $fix.Prerequisites = @('Admin')
+    $fix.Execute = {
+        Stop-Service wuauserv -Force
+        Stop-Service bits -Force
+        
+        $updatePath = "$env:SystemRoot\SoftwareDistribution\Download"
+        if (Test-Path $updatePath) {
+            $items = Get-ChildItem $updatePath -Recurse -Force -ErrorAction SilentlyContinue
+            $count = $items.Count
+            Remove-Item "$updatePath\*" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        
+        Start-Service wuauserv
+        Start-Service bits
+        
+        return @{ files_removed = $count }
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Reset TCP/IP Stack
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'reset-tcpip-stack'
+    $fix.Name = 'Reset TCP/IP Stack'
+    $fix.Description = 'Reset Winsock and TCP/IP stack to fix network connectivity issues'
+    $fix.Category = [FixCategory]::Network
+    $fix.Risk = [RiskLevel]::Medium
+    $fix.RequiresApproval = $true
+    $fix.RequiresReboot = $true
+    $fix.IsReversible = $false
+    $fix.EstimatedDurationSec = 30
+    $fix.CheckIds = @('Network', 'TCP')
+    $fix.Prerequisites = @('Admin')
+    $fix.Execute = {
+        netsh winsock reset | Out-Null
+        netsh int ip reset | Out-Null
+        ipconfig /flushdns | Out-Null
+        return @{ status = 'reset_complete'; reboot_required = $true }
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Optimize DNS Settings
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'optimize-dns-servers'
+    $fix.Name = 'Optimize DNS Servers'
+    $fix.Description = 'Switch to fast public DNS servers (Cloudflare 1.1.1.1, Google 8.8.8.8)'
+    $fix.Category = [FixCategory]::Network
+    $fix.Risk = [RiskLevel]::Low
+    $fix.RequiresApproval = $true
+    $fix.RequiresReboot = $false
+    $fix.IsReversible = $true
+    $fix.EstimatedDurationSec = 10
+    $fix.CheckIds = @('DNS')
+    $fix.Prerequisites = @('Admin')
+    $fix.PreCheck = {
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+        $currentDns = @{}
+        foreach ($adapter in $adapters) {
+            $dns = Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4
+            $currentDns[$adapter.Name] = $dns.ServerAddresses
+        }
+        return @{ saved_dns = $currentDns }
+    }
+    $fix.Execute = {
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+        $changed = 0
+        foreach ($adapter in $adapters) {
+            try {
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses @('1.1.1.1', '8.8.8.8') -ErrorAction Stop
+                $changed++
+            } catch {
+                Write-Warning "Failed to set DNS for $($adapter.Name): $_"
+            }
+        }
+        return @{ adapters_changed = $changed }
+    }
+    $fix.Rollback = {
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+        foreach ($adapter in $adapters) {
+            Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses
+        }
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Disable Unnecessary Startup Programs
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'optimize-startup-programs'
+    $fix.Name = 'Disable Non-Essential Startup Programs'
+    $fix.Description = 'Disable startup programs that slow down boot time (preserves security software)'
+    $fix.Category = [FixCategory]::Performance
+    $fix.Risk = [RiskLevel]::Medium
+    $fix.RequiresApproval = $true
+    $fix.RequiresReboot = $false
+    $fix.IsReversible = $true
+    $fix.EstimatedDurationSec = 30
+    $fix.CheckIds = @('BootTime', 'Startup')
+    $fix.Prerequisites = @('Admin')
+    $fix.Execute = {
+        # Get startup items from registry
+        $startupPaths = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+            'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+        )
+        
+        $essentialKeywords = @('antivirus', 'defender', 'security', 'firewall', 'driver')
+        $disabled = 0
+        $disabledItems = @()
+        
+        foreach ($path in $startupPaths) {
+            if (Test-Path $path) {
+                $items = Get-ItemProperty $path -ErrorAction SilentlyContinue
+                if ($items) {
+                    $items.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
+                        $name = $_.Name
+                        $isEssential = $false
+                        foreach ($keyword in $essentialKeywords) {
+                            if ($name -like "*$keyword*") {
+                                $isEssential = $true
+                                break
+                            }
+                        }
+                        
+                        if (-not $isEssential) {
+                            try {
+                                # Move to backup location instead of deleting
+                                $backupPath = "$path\__Disabled"
+                                if (-not (Test-Path $backupPath)) {
+                                    New-Item -Path $backupPath -Force | Out-Null
+                                }
+                                Set-ItemProperty -Path $backupPath -Name $name -Value $_.Value
+                                Remove-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+                                $disabled++
+                                $disabledItems += $name
+                            } catch {
+                                Write-Warning "Failed to disable ${name}: $($_.Exception.Message)"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return @{ programs_disabled = $disabled; items = $disabledItems }
+    }
+    $fix.Rollback = {
+        $startupPaths = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+            'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+        )
+        
+        foreach ($path in $startupPaths) {
+            $backupPath = "$path\__Disabled"
+            if (Test-Path $backupPath) {
+                $items = Get-ItemProperty $backupPath -ErrorAction SilentlyContinue
+                if ($items) {
+                    $items.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
+                        Set-ItemProperty -Path $path -Name $_.Name -Value $_.Value
+                    }
+                }
+                Remove-Item $backupPath -Recurse -Force
+            }
+        }
+    }
+    Register-RemediationFix $fix
+
+    # Fix: Clear Event Logs
+    $fix = [RemediationFix]::new()
+    $fix.Id = 'clear-event-logs'
+    $fix.Name = 'Clear Old Event Logs'
+    $fix.Description = 'Archive and clear old Windows event logs to improve performance'
+    $fix.Category = [FixCategory]::Maintenance
+    $fix.Risk = [RiskLevel]::Safe
+    $fix.RequiresApproval = $true
+    $fix.RequiresReboot = $false
+    $fix.IsReversible = $false
+    $fix.EstimatedDurationSec = 60
+    $fix.CheckIds = @('EventLogs')
+    $fix.Prerequisites = @('Admin')
+    $fix.Execute = {
+        $logs = Get-WinEvent -ListLog * -ErrorAction SilentlyContinue | 
+                Where-Object { $_.RecordCount -gt 0 -and -not $_.IsEnabled -eq $false }
+        
+        $cleared = 0
+        foreach ($log in $logs) {
+            try {
+                # Skip critical logs
+                if ($log.LogName -notmatch 'Security|System|Application') {
+                    wevtutil cl $log.LogName 2>$null
+                    $cleared++
+                }
+            } catch {
+                # Ignore errors for logs we can't clear
+            }
+        }
+        
+        return @{ logs_cleared = $cleared }
     }
     Register-RemediationFix $fix
 
