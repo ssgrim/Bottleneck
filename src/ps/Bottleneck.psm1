@@ -50,7 +50,7 @@ catch {
 Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
 Import-ModuleFile 'Bottleneck.Checks.ps1'
 Import-ModuleFile 'Bottleneck.Fixes.ps1'
-Import-ModuleFile 'Bottleneck.Parallel.ps1'
+. (Join-Path $PSScriptRoot 'Bottleneck.Parallel.ps1')
 
 # Dot-source Report file directly at script scope to keep functions in module scope
 . (Join-Path $PSScriptRoot 'Bottleneck.Report.ps1')
