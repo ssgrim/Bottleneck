@@ -269,10 +269,174 @@ ul li {
 .ai-help-btn::before {
     content: '🤖 ';
 }
+.fix-button {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.3s;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+.fix-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.5);
+    background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+}
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.7);
+}
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 30px;
+    border-radius: 12px;
+    width: 80%;
+    max-width: 600px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+.modal-header {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: #667eea;
+}
+.modal-body {
+    margin: 20px 0;
+    line-height: 1.8;
+}
+.modal-footer {
+    text-align: right;
+    margin-top: 30px;
+}
+.modal-btn {
+    padding: 12px 24px;
+    margin-left: 10px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+.modal-btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.modal-btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+.modal-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
 </style>
 </head>
 <body>
+<div id="fixModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header" id="modalTitle">Apply Fix</div>
+    <div class="modal-body" id="modalBody">
+      Preparing to apply automated fix...
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-secondary" onclick="closeFixDialog()">Cancel</button>
+      <button class="modal-btn modal-btn-primary" id="applyFixBtn" onclick="applyFix()">Apply Fix</button>
+    </div>
+  </div>
+</div>
 <script>
+let currentFixId = '';
+let currentCheckId = '';
+
+function showFixDialog(fixId, checkId) {
+    currentFixId = fixId;
+    currentCheckId = checkId;
+    
+    const fixInfo = {
+        'dns-cache-flush': {
+            title: 'Flush DNS Cache',
+            description: 'This will clear your DNS resolver cache to fix DNS resolution issues. This is a safe operation that requires no approval.',
+            risk: 'Safe'
+        },
+        'disk-cleanup-temp': {
+            title: 'Clean Temporary Files',
+            description: 'This will remove temporary files from your system to free up disk space. Your active files will not be affected.',
+            risk: 'Low'
+        },
+        'network-adapter-reset': {
+            title: 'Reset Network Adapter',
+            description: 'This will restart your network adapters. You may experience a brief network interruption (5-10 seconds). Requires administrator rights.',
+            risk: 'Medium'
+        },
+        'power-plan-high-performance': {
+            title: 'Switch to High Performance',
+            description: 'This will change your power plan to High Performance for better CPU and disk performance. This will increase power consumption. Changes can be reverted.',
+            risk: 'Low'
+        },
+        'optimize-startup-programs': {
+            title: 'Optimize Startup Programs',
+            description: 'This will disable non-essential startup programs to improve boot time. Security software will be preserved. Changes can be reverted.',
+            risk: 'Medium'
+        },
+        'defender-update-definitions': {
+            title: 'Update Windows Defender',
+            description: 'This will force an update of Windows Defender virus definitions. Requires internet connection.',
+            risk: 'Low'
+        },
+        'clear-windows-update-cache': {
+            title: 'Clear Windows Update Cache',
+            description: 'This will clear the Windows Update download cache. The Windows Update service will be restarted. Requires administrator rights.',
+            risk: 'Medium'
+        },
+        'reset-tcpip-stack': {
+            title: 'Reset TCP/IP Stack',
+            description: 'This will reset the Winsock and TCP/IP stack. A system reboot will be required. Requires administrator rights.',
+            risk: 'Medium'
+        },
+        'clear-event-logs': {
+            title: 'Clear Event Logs',
+            description: 'This will clear old Windows event logs to improve performance. Critical logs will be preserved.',
+            risk: 'Safe'
+        }
+    };
+    
+    const info = fixInfo[fixId] || { title: 'Apply Fix', description: 'Apply automated remediation fix.', risk: 'Unknown' };
+    
+    document.getElementById('modalTitle').textContent = info.title;
+    document.getElementById('modalBody').innerHTML = `
+        <p><strong>Description:</strong> ${info.description}</p>
+        <p><strong>Risk Level:</strong> <span style="color: ${info.risk === 'Safe' ? '#28a745' : info.risk === 'Low' ? '#20c997' : '#ffc107'}">${info.risk}</span></p>
+        <p style="margin-top: 20px;"><strong>Note:</strong> To apply this fix, copy and run the following PowerShell command as Administrator:</p>
+        <code style="display: block; background: #f8f9fa; padding: 15px; border-radius: 6px; margin-top: 10px; font-family: 'Consolas', monospace; font-size: 13px;">
+Import-Module "$PSScriptRoot\\..\\..\\src\\ps\\Bottleneck.Remediation.ps1"; Invoke-RemediationFix -FixId '${fixId}'
+        </code>
+    `;
+    
+    document.getElementById('fixModal').style.display = 'block';
+}
+
+function closeFixDialog() {
+    document.getElementById('fixModal').style.display = 'none';
+}
+
+function applyFix() {
+    alert('To apply this fix, please run the PowerShell command shown above in an elevated PowerShell terminal.');
+    closeFixDialog();
+}
+
 function getAIHelp(checkId, evidence, message, provider) {
     const systemInfo = 'Computer: $env:COMPUTERNAME, OS: Windows';
     const prompt = 'I am troubleshooting a performance issue on my Windows computer.\n\nIssue: '+checkId+'\nDescription: '+message+'\nEvidence: '+evidence+'\nSystem: '+systemInfo+'\n\nPlease provide:\n1. Root cause analysis\n2. Step-by-step troubleshooting steps\n3. Recommended fixes (prioritized)\n4. Prevention tips';
@@ -593,11 +757,37 @@ $(foreach ($trend in $trendReport.Trends) {
         }
 
         $fixBtn = ''
+        # Map check IDs to remediation fixes
+        $availableFixes = @{
+            'DNS' = 'dns-cache-flush'
+            'Network' = 'network-adapter-reset'
+            'NetworkAdapter' = 'network-adapter-reset'
+            'TCP' = 'reset-tcpip-stack'
+            'PowerPlan' = 'power-plan-high-performance'
+            'CPU' = 'power-plan-high-performance'
+            'Storage' = 'disk-cleanup-temp'
+            'Disk' = 'disk-cleanup-temp'
+            'Startup' = 'optimize-startup-programs'
+            'BootTime' = 'optimize-startup-programs'
+            'WindowsDefender' = 'defender-update-definitions'
+            'Antivirus' = 'defender-update-definitions'
+            'AV' = 'defender-update-definitions'
+            'WindowsUpdate' = 'clear-windows-update-cache'
+            'Update' = 'clear-windows-update-cache'
+            'EventLogs' = 'clear-event-logs'
+        }
+        
+        if ($availableFixes.ContainsKey($r.Id) -and $r.Impact -gt 5) {
+            $fixId = $availableFixes[$r.Id]
+            $fixBtn = "<button class='fix-button' onclick=`"showFixDialog('$fixId', '$($r.Id)')`">🔧 Apply Fix</button>"
+        }
+        
+        # Legacy fix buttons for backward compatibility
         switch ($r.FixId) {
-            'Cleanup' { $fixBtn = '<button onclick="runFix(''Cleanup'')">🔧 Open Storage Settings</button>' }
-            'Retrim' { $fixBtn = '<button onclick="runFix(''Retrim'')">🔧 Optimize Drive</button>' }
-            'PowerPlanHighPerformance' { $fixBtn = '<button onclick="runFix(''PowerPlanHighPerformance'')">⚡ Change Power Plan</button>' }
-            'TriggerUpdate' { $fixBtn = '<button onclick="runFix(''TriggerUpdate'')">🔄 Open Windows Update</button>' }
+            'Cleanup' { $fixBtn = '<button class="fix-button" onclick="runFix(''Cleanup'')">🔧 Open Storage Settings</button>' }
+            'Retrim' { $fixBtn = '<button class="fix-button" onclick="runFix(''Retrim'')">🔧 Optimize Drive</button>' }
+            'PowerPlanHighPerformance' { $fixBtn = '<button class="fix-button" onclick="runFix(''PowerPlanHighPerformance'')">⚡ Change Power Plan</button>' }
+            'TriggerUpdate' { $fixBtn = '<button class="fix-button" onclick="runFix(''TriggerUpdate'')">🔄 Open Windows Update</button>' }
             'Defragment' { $fixBtn = '<button onclick="runFix(''Defragment'')">🔧 Defragment Drive</button>' }
             'MemoryDiagnostic' { $fixBtn = '<button onclick="runFix(''MemoryDiagnostic'')">🔍 Memory Diagnostic</button>' }
             'RestartServices' { $fixBtn = '<button onclick="runFix(''RestartServices'')">⚙️ Manage Services</button>' }

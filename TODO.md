@@ -42,6 +42,21 @@
 
 ## In Progress 🔄
 
+- [ ] Phase 8: Automated Remediation Engine
+  - [x] Core remediation framework (FixRegistry, execution engine)
+  - [x] Safety features (approval workflow, rollback, restore points)
+  - [x] 10 built-in fixes covering Performance, Network, Security, Maintenance
+    - DNS cache flush, disk cleanup, network adapter reset
+    - Power plan optimization, DNS server optimization
+    - Windows Defender update, Windows Update cache clear
+    - TCP/IP stack reset, startup program optimization
+    - Event log cleanup
+  - [x] Fix execution history tracking with JSON logging
+  - [x] HTML report integration with "Apply Fix" buttons
+  - [x] Modal dialogs with fix descriptions and PowerShell commands
+  - [ ] Direct fix execution from HTML (requires elevated browser permissions)
+  - [ ] Fleet-wide remediation dashboard
+
 - [ ] Parallel execution implementation (using Start-ThreadJob for PS7+)
   - [x] Updated to use Start-ThreadJob instead of Start-Job for better module function access
   - [ ] Test parallel execution performance improvement
