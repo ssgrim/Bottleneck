@@ -1,6 +1,7 @@
 # TODO List
 
 ## Completed ✅
+
 - [x] Quick Scan MVP (6 basic checks)
 - [x] Standard Scan expansion (46 checks total)
   - [x] Phase 1: Hardware monitoring (thermal, battery, disk, memory, CPU throttle)
@@ -15,6 +16,7 @@
   - [x] Trend analysis for performance metrics over time
   - [x] Export functions for Grafana and InfluxDB dashboards
   - [x] Historical trend reporting
+  - [x] Grafana dashboard templates (System Health, Network Quality, Performance Trends)
 - [x] HTML report generation with color-coded scoring
 - [x] Smart recommendations engine
 - [x] Multi-location report saving (Reports/, Documents/, OneDrive/)
@@ -39,13 +41,14 @@
   - [x] Context includes issue ID, evidence, message, system info
 
 ## In Progress 🔄
-- [ ] Parallel execution implementation (requires module scope refactoring)
-  - Current: Sequential execution with timing logs
-  - Target: 60-70% speed improvement on Standard/Deep scans
-  - Blocker: PowerShell 7 parallel runspaces can't access module functions
-  - Solution: Export functions differently or use jobs with module import
+
+- [ ] Parallel execution implementation (using Start-ThreadJob for PS7+)
+  - [x] Updated to use Start-ThreadJob instead of Start-Job for better module function access
+  - [ ] Test parallel execution performance improvement
+  - [ ] Validate all check functions work in parallel threads
 
 ## High Priority 📌
+
 - [ ] Fix remaining event log issues
   - [ ] Handle null StartTime in Get-WinEvent FilterHashtable
   - [ ] Add more robust error handling for event log access denied scenarios
@@ -58,8 +61,9 @@
   - [ ] Validate report tier values
 
 ## Medium Priority 🔧
-- [ ] Trend visualization enhancements
-  - [ ] Add charts/graphs to HTML report (Chart.js integration)
+
+- [x] Trend visualization enhancements
+  - [x] Add charts/graphs to HTML report (Chart.js integration)
   - [ ] Show performance degradation over time
   - [ ] Highlight metrics that are worsening
 - [ ] Additional fix implementations
@@ -75,6 +79,7 @@
   - [ ] Include embedded charts in PDF
 
 ## Low Priority 💡
+
 - [ ] GUI interface (Windows Forms or WPF)
 - [ ] Scheduled scan automation (Task Scheduler integration)
 - [ ] Email report delivery
@@ -83,6 +88,7 @@
 - [ ] MacOS/Linux compatibility layer
 
 ## Technical Debt 🔨
+
 - [ ] Replace -ErrorAction SilentlyContinue with proper try/catch blocks
 - [ ] Add unit tests for core check functions
 - [ ] Add integration tests for report generation
@@ -91,6 +97,7 @@
 - [ ] CI/CD pipeline (GitHub Actions)
 
 ## Future Enhancements 🚀
+
 - [ ] Machine learning anomaly detection
 - [ ] Predictive failure analysis
 - [ ] Community check repository
@@ -99,6 +106,7 @@
 - [ ] Mobile app for scan results viewing
 
 ## Notes 📝
+
 - **Performance**: Standard scan currently ~51s, Deep scan ~90s (varies by system)
 - **Compatibility**: Requires PowerShell 7+, Windows 10/11
 - **Admin Rights**: Many checks require elevation for full diagnostics

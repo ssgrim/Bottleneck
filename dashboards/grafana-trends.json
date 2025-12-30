@@ -1,0 +1,169 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Bottleneck - Performance Trends",
+    "tags": ["bottleneck", "performance", "trends"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Overall Performance Trend",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "avg(bottleneck_check_score)",
+            "legendFormat": "Average Score"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "CPU vs Memory Correlation",
+        "type": "scatter",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"CPU\"}",
+            "legendFormat": "CPU"
+          },
+          {
+            "expr": "bottleneck_check_score{check=\"RAM\"}",
+            "legendFormat": "Memory"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 3,
+        "title": "Disk vs Network Correlation",
+        "type": "scatter",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score{check=\"Disk\"}",
+            "legendFormat": "Disk"
+          },
+          {
+            "expr": "bottleneck_check_score{check=\"Network\"}",
+            "legendFormat": "Network"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Performance by Category",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "bottleneck_check_score",
+            "legendFormat": "{{check}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 5,
+        "title": "Weekly Performance Comparison",
+        "type": "barchart",
+        "targets": [
+          {
+            "expr": "avg_over_time(bottleneck_check_score[7d])",
+            "legendFormat": "{{check}} - 7d avg"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 6,
+        "title": "Monthly Trend Analysis",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "avg_over_time(bottleneck_check_score[30d])",
+            "legendFormat": "{{check}} - 30d avg"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      },
+      {
+        "id": 7,
+        "title": "Performance Degradation Alerts",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "bottleneck_performance_degradation",
+            "legendFormat": "{{check}} degradation"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        }
+      },
+      {
+        "id": 8,
+        "title": "System Health Timeline",
+        "type": "status-history",
+        "targets": [
+          {
+            "expr": "bottleneck_system_health_status",
+            "legendFormat": "System Status"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        }
+      }
+    ],
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "15m",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}
