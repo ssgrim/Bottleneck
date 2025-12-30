@@ -48,6 +48,11 @@ out/
 # Node modules (if using any JS tools)
 node_modules/
 
+# Network capture files
+WireSharkLogs/
+*.pcapng
+*.pcap
+
 # Package management
 *.nupkg
 packages/
