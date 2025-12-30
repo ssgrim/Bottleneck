@@ -62,7 +62,10 @@ function Get-SafeWinEvent {
         [int]$MaxEvents = 100,
 
         [ValidateRange(5, 300)]
-        [int]$TimeoutSeconds = 10
+        [int]$TimeoutSeconds = 10,
+
+        [ValidateRange(1, 180)]
+        [int]$RetryWindowDays = 7
     )
 
     try {
@@ -89,14 +92,34 @@ function Get-SafeWinEvent {
         }
 
         # Use Invoke-WithTimeout if available, otherwise direct call
+        $events = $null
         if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
-            return Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
+            $events = Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
                 Get-WinEvent -FilterHashtable $using:FilterHashtable -MaxEvents $using:MaxEvents -ErrorAction SilentlyContinue
             }
         }
         else {
-            return Get-WinEvent -FilterHashtable $FilterHashtable -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
+            $events = Get-WinEvent -FilterHashtable $FilterHashtable -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
         }
+
+        # Retry with narrower window if nothing returned and StartTime was present
+        if ((-not $events -or $events.Count -eq 0) -and $FilterHashtable.ContainsKey('StartTime')) {
+            $fallbackFilter = $FilterHashtable.Clone()
+            $fallbackFilter['StartTime'] = (Get-Date).AddDays(-1 * $RetryWindowDays)
+            if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
+                $events = Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
+                    Get-WinEvent -FilterHashtable $using:fallbackFilter -MaxEvents $using:MaxEvents -ErrorAction SilentlyContinue
+                }
+            }
+            else {
+                $events = Get-WinEvent -FilterHashtable $fallbackFilter -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
+            }
+            if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
+                Write-BottleneckLog "Event log fallback applied: narrowed window to $RetryWindowDays days for $($fallbackFilter.LogName)" -Level "WARN"
+            }
+        }
+
+        return $events
     }
     catch [System.UnauthorizedAccessException] {
         Write-BottleneckLog "Access denied to event log: $($FilterHashtable.LogName)" -Level "WARN"

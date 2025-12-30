@@ -50,6 +50,7 @@ catch {
 Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
 Import-ModuleFile 'Bottleneck.Checks.ps1'
 Import-ModuleFile 'Bottleneck.Fixes.ps1'
+Import-ModuleFile 'Bottleneck.Parallel.ps1'
 
 # Dot-source Report file directly at script scope to keep functions in module scope
 . (Join-Path $PSScriptRoot 'Bottleneck.Report.ps1')
@@ -167,55 +168,7 @@ function Invoke-BottleneckScan {
         Write-BottleneckLog "Using parallel execution (max $maxConcurrency jobs)" -Level "INFO"
         Write-Progress -Activity "System Scan ($Tier)" -Status "Starting parallel jobs..." -PercentComplete 0
 
-        $jobs = @()
-        $results = @()
-        $submitted = 0
-        $completed = 0
-
-        foreach ($check in $checks) {
-            # throttle submissions
-            while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $maxConcurrency) {
-                $ready = Receive-Job -Job ($jobs | Where-Object { $_.State -ne 'Running' }) -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
-                if ($ready) {
-                    $results += ($ready | Where-Object { $_ -and -not $_.Failed })
-                }
-                $jobs = $jobs | Where-Object { $_.State -eq 'Running' }
-                $completed = $results.Count
-                $pct = [math]::Round(($completed / $checks.Count) * 100)
-                Write-Progress -Activity "System Scan ($Tier)" -Status "Throttling: $($jobs.Count) running" -PercentComplete $pct
-            }
-
-            $submitted++
-            $job = Start-ThreadJob -ScriptBlock {
-                param($checkName, $modulePath)
-                try {
-                    Import-Module (Join-Path $modulePath 'Bottleneck.psm1') -Force -ErrorAction Stop
-                    $result = & $checkName
-                    if ($result) { $result }
-                }
-                catch {
-                    [PSCustomObject]@{
-                        Id        = 'Error'
-                        CheckName = $checkName
-                        Error     = $_.Exception.Message
-                        Failed    = $true
-                    }
-                }
-            } -ArgumentList $check, $PSScriptRoot -ErrorAction SilentlyContinue
-            $jobs += $job
-        }
-
-        # Drain remaining jobs
-        while ($jobs.Count -gt 0) {
-            $ready = Receive-Job -Job $jobs -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
-            if ($ready) {
-                $results += ($ready | Where-Object { $_ -and -not $_.Failed })
-            }
-            $jobs = $jobs | Where-Object { $_.State -eq 'Running' }
-            $completed = $results.Count
-            $pct = [math]::Round(($completed / $checks.Count) * 100)
-            Write-Progress -Activity "System Scan ($Tier)" -Status "$($jobs.Count) running, $completed completed" -PercentComplete $pct
-        }
+        $results = Invoke-BottleneckParallelChecks -Checks $checks -Tier $Tier -ModulePath $PSScriptRoot -MaxConcurrency $maxConcurrency
 
         Write-Progress -Activity "System Scan ($Tier)" -Completed
     }
