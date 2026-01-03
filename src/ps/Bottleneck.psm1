@@ -48,6 +48,56 @@ catch {
 
 # Load other modules (hardened paths)
 Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
+# Bottleneck.psm1
+# Main module entry point
+
+$ErrorActionPreference = 'Continue'  # Don't let errors stop module loading
+
+function Import-ModuleFile($name) {
+    $filePath = Join-Path $PSScriptRoot $name
+    if (-not (Test-Path $filePath)) {
+        Write-Warning "Module file not found: $name"
+        return
+    }
+    try {
+        # Use script scope to ensure functions stay in module scope
+        . $ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create((Get-Content $filePath -Raw)))
+    }
+    catch {
+        Write-Warning "Failed to load module file '$name': $_"
+        Write-Warning "Error at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line)"
+    }
+}
+
+# Load debugging and observability first
+Import-ModuleFile 'Bottleneck.Debug.ps1'
+Import-ModuleFile 'Bottleneck.HealthCheck.ps1'
+
+# Load performance and logging utilities - dot-source at script scope to export Get-CachedCimInstance
+. (Join-Path $PSScriptRoot 'Bottleneck.Performance.ps1')
+Import-ModuleFile 'Bottleneck.Logging.ps1'
+
+# Set module root for history
+$global:BottleneckModuleRoot = Split-Path $PSScriptRoot -Parent
+
+# Load history functions - dot-source at script scope
+. (Join-Path $PSScriptRoot 'Bottleneck.History.ps1')
+
+# Initialize logging (guarded)
+try {
+    if (Get-Command Initialize-BottleneckLogging -ErrorAction SilentlyContinue) {
+        Initialize-BottleneckLogging
+    }
+    else {
+        Write-Warning "Logging initialization unavailable; continuing without centralized log"
+    }
+}
+catch {
+    Write-Warning "Failed to initialize logging: $_"
+}
+
+# Load other modules (hardened paths)
+Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
 . (Join-Path $PSScriptRoot 'Bottleneck.Checks.ps1')
 Import-ModuleFile 'Bottleneck.Fixes.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Parallel.ps1')
@@ -70,7 +120,7 @@ Import-ModuleFile 'Bottleneck.Fixes.ps1'
 # Check admin rights
 $script:IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $script:IsAdmin) {
-    Write-Warning "⚠️  Some checks require administrator privileges. Run as admin for complete results."
+    Write-Warning "Some checks require administrator privileges. Run as admin for complete results."
     if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
         Write-BottleneckLog "Running without admin privileges - some checks will be limited" -Level "WARN"
     }
@@ -87,7 +137,6 @@ if (-not (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue)) {
 }
 
 # Inline critical functions that aren't loading from sourced files
-# TODO: Fix module scoping issue - sourced .ps1 files aren't persisting functions
 if (-not (Get-Command New-BottleneckResult -ErrorAction SilentlyContinue)) {
     function New-BottleneckResult {
         param([string]$Id, [string]$Tier, [string]$Category, [int]$Impact, [int]$Confidence, [int]$Effort, [int]$Priority, [string]$Evidence, [string]$FixId, [string]$Message)
@@ -107,9 +156,6 @@ if (-not (Get-Command Initialize-BottleneckDebug -ErrorAction SilentlyContinue))
 }
 if (-not (Get-Command Invoke-BottleneckHealthCheck -ErrorAction SilentlyContinue)) {
     try { . (Join-Path $PSScriptRoot 'Bottleneck.HealthCheck.ps1') } catch { Write-Warning "Failed to load Bottleneck.HealthCheck.ps1: $_" }
-}
-if (-not (Get-Command Save-BottleneckBaseline -ErrorAction SilentlyContinue)) {
-    try { . (Join-Path $PSScriptRoot 'Bottleneck.Baseline.ps1') } catch { Write-Warning "Failed to load Bottleneck.Baseline.ps1: $_" }
 }
 
 function Invoke-BottleneckScan {
@@ -149,7 +195,7 @@ function Invoke-BottleneckScan {
             }
             catch {
                 Write-BottleneckLog "Check $check failed: $_" -Level "ERROR" -CheckId $check
-                Write-Host "  ⚠ $check failed (non-critical, continuing)" -ForegroundColor Yellow
+                Write-Host "  Warning: $check failed (non-critical, continuing)" -ForegroundColor Yellow
             }
         }
         Write-Progress -Activity "System Scan ($Tier)" -Completed
@@ -172,19 +218,34 @@ function Invoke-BottleneckScan {
 
     $scanDuration = ((Get-Date) - $scanStart).TotalSeconds
     Write-BottleneckLog "Scan completed in $([math]::Round($scanDuration,1)) seconds with $($results.Count) results" -Level "INFO"
-    Write-Host "✓ Scan complete: $($results.Count) findings in $([math]::Round($scanDuration,1))s" -ForegroundColor Green
+    Write-Host "Scan complete: $($results.Count) findings in $([math]::Round($scanDuration,1))s" -ForegroundColor Green
+
+    # Budget check for the overall tier duration
+    try {
+        if (Get-Command Test-PerformanceBudget -ErrorAction SilentlyContinue) {
+            $budgetResult = Test-PerformanceBudget -CheckName "Scan-$Tier" -ElapsedTime ([timespan]::FromSeconds($scanDuration)) -Tier $Tier
+            if ($budgetResult.Exceeded) {
+                $msg = "Performance budget exceeded for {0}: {1}s (budget {2}s)" -f $Tier, $scanDuration, $budgetResult.BudgetSeconds
+                Write-BottleneckLog $msg -Level "WARN"
+            }
+        }
+    }
+    catch {
+        $errMsg = "Performance budget check failed: {0}" -f $_.Exception.Message
+        Write-BottleneckLog $errMsg -Level "WARN"
+    }
 
     return $results
 }
 
-# Stub functions for network RCA (implementations in bottleneck/src/ps/Bottleneck.NetworkDeep.ps1)
+# Stub functions for network RCA (implementations live elsewhere)
 function Invoke-BottleneckNetworkRootCause {
-    Write-Warning "Invoke-BottleneckNetworkRootCause is not yet integrated into this module version"
+    Write-Warning 'Invoke-BottleneckNetworkRootCause is not yet integrated into this module version'
     return $null
 }
 
 function Invoke-BottleneckNetworkCsvDiagnostics {
-    Write-Warning "Invoke-BottleneckNetworkCsvDiagnostics is not yet integrated into this module version"
+    Write-Warning 'Invoke-BottleneckNetworkCsvDiagnostics is not yet integrated into this module version'
     return $null
 }
 

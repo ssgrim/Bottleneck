@@ -87,3 +87,38 @@ function Clear-CIMCache {
     $script:CIMCache.Clear()
     Write-Verbose "CIM cache cleared"
 }
+
+# Performance budget helper to flag slow checks/tier runs
+function Test-PerformanceBudget {
+    param(
+        [Parameter(Mandatory)][string]$CheckName,
+        [Parameter(Mandatory)][timespan]$ElapsedTime,
+        [ValidateSet('Quick','Standard','Deep')][string]$Tier = 'Standard'
+    )
+
+    $budgets = @{
+        'Quick'    = 30  # seconds total budget
+        'Standard' = 45
+        'Deep'     = 75
+    }
+
+    $budgetSeconds = $budgets[$Tier]
+    $elapsed = [math]::Round($ElapsedTime.TotalSeconds,2)
+
+    $result = [pscustomobject]@{
+        CheckName      = $CheckName
+        Tier           = $Tier
+        ElapsedSeconds = $elapsed
+        BudgetSeconds  = $budgetSeconds
+        Exceeded       = $false
+        Severity       = 'None'
+    }
+
+    if ($elapsed -gt ($budgetSeconds * 0.8)) {
+        $result.Exceeded = $true
+        $result.Severity = if ($elapsed -gt $budgetSeconds) { 'Critical' } else { 'Warning' }
+        Write-Warning "⚠️  $CheckName took ${elapsed}s (budget ${budgetSeconds}s, tier $Tier)"
+    }
+
+    return $result
+}

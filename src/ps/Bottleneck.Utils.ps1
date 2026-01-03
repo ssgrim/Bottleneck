@@ -122,7 +122,15 @@ function Get-SafeWinEvent {
         return $events
     }
     catch [System.UnauthorizedAccessException] {
+        # Graceful fallback: try summary count via wevtutil so we at least surface that the log exists
         Write-BottleneckLog "Access denied to event log: $($FilterHashtable.LogName)" -Level "WARN"
+        try {
+            $countOutput = wevtutil qe $FilterHashtable.LogName /c /q:"*" 2>$null
+            Write-BottleneckLog "Access denied fallback: $($FilterHashtable.LogName) count=$countOutput" -Level "WARN"
+        }
+        catch {
+            Write-BottleneckLog "Access denied fallback failed for $($FilterHashtable.LogName): $($_.Exception.Message)" -Level "WARN"
+        }
         return @()
     }
     catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
