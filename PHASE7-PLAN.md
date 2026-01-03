@@ -1,9 +1,9 @@
 # Phase 7: Historical Trend Analysis & Dashboard Integration
 
-**Target Branch**: `phase7-trends-dashboards`  
-**Status**: 📋 Planning  
-**Priority**: High  
-**Estimated Timeline**: 2-3 weeks  
+**Target Branch**: `phase7-trends-dashboards`
+**Status**: 📋 Planning
+**Priority**: High
+**Estimated Timeline**: 2-3 weeks
 **Dependencies**: Phase 1 (Complete), Phase 6 (Advanced Alerts - Complete)
 
 ---
@@ -42,11 +42,13 @@ Phase 7 focuses on **long-term trend analysis** and **dashboard integration** to
 ```
 
 **Storage Options**:
+
 - **Option A**: SQLite database (preferred for query performance)
+
   - File: `Reports/bottleneck-history.db`
   - Tables: scans, metrics, checks, network_drops, speedtests
   - Requires: .NET System.Data.SQLite or PowerShell SQLite module
-  
+
 - **Option B**: JSON file per scan (simpler, no dependencies)
   - Directory: `Reports/history/YYYY/MM/`
   - Files: `scan-YYYY-MM-DD_HH-mm-ss.json`
@@ -118,16 +120,18 @@ CREATE INDEX idx_checks_scan ON checks(scan_id);
 ```
 
 **Retention Policy**:
+
 - Keep all scans for 30 days (configurable)
 - After 30 days, aggregate to daily summaries
 - After 180 days, aggregate to weekly summaries
 - After 365 days, keep monthly summaries only
 
 **Configuration** (`config/history.json`):
+
 ```json
 {
   "enabled": true,
-  "storageType": "sqlite",  // or "json"
+  "storageType": "sqlite", // or "json"
   "retentionDays": 30,
   "aggregateDaily": 180,
   "aggregateWeekly": 365,
@@ -167,6 +171,7 @@ Get-DegradationAlert          # Warn about metrics trending worse
 **Trend Metrics to Track**:
 
 **System Performance**:
+
 - CPU usage (avg, P95, peak)
 - Memory usage (avg, P95, leak indicators)
 - Disk usage (free space trend, growth rate)
@@ -174,6 +179,7 @@ Get-DegradationAlert          # Warn about metrics trending worse
 - Process count (bloat detection)
 
 **Network Performance**:
+
 - Drop rate per hour (rolling average)
 - Latency (avg, P95, jitter)
 - Packet loss percentage
@@ -181,12 +187,14 @@ Get-DegradationAlert          # Warn about metrics trending worse
 - Bandwidth (if speedtest enabled)
 
 **Reliability Metrics**:
+
 - Critical issue frequency
 - Service failure rate
 - Error event log growth rate
 - SMART attribute degradation
 
 **Trend Classification**:
+
 - **Improving**: Metric getting better over time (green)
 - **Stable**: No significant change (gray)
 - **Degrading Slowly**: Gradual decline, not yet critical (yellow)
@@ -230,12 +238,14 @@ $changePoint = Get-ChangePointDetection -MetricName "memory_usage_percent" -Days
 **New Report Sections**:
 
 **A. Performance Trend Dashboard**
+
 - Display key metrics with 7-day and 30-day trends
 - Visual indicators: ↑ (improving), → (stable), ↓ (degrading)
 - Sparkline charts showing metric history
 - Color-coded based on trend severity
 
 **B. Historical Comparison Panel**
+
 ```
 Current Scan vs. Last Week:
 ✅ CPU Usage:      65% → 58% (↓ 10.8% improvement)
@@ -245,6 +255,7 @@ Current Scan vs. Last Week:
 ```
 
 **C. Long-term Health Score**
+
 - Overall system health: 0-100 score
 - Trend over last 30 days
 - Projection: "At current trend, system health will reach 'Poor' in 45 days"
@@ -255,23 +266,30 @@ Current Scan vs. Last Week:
 <!-- CPU Usage - Last 30 Days -->
 <canvas id="cpuTrendChart" width="400" height="200"></canvas>
 <script>
-const ctx = document.getElementById('cpuTrendChart').getContext('2d');
-new Chart(ctx, {
-    type: 'line',
+  const ctx = document.getElementById("cpuTrendChart").getContext("2d");
+  new Chart(ctx, {
+    type: "line",
     data: {
-        labels: [/* dates from history */],
-        datasets: [{
-            label: 'CPU Usage %',
-            data: [/* values from history */],
-            borderColor: 'rgb(75, 192, 192)',
-            tension: 0.1
-        }]
-    }
-});
+      labels: [
+        /* dates from history */
+      ],
+      datasets: [
+        {
+          label: "CPU Usage %",
+          data: [
+            /* values from history */
+          ],
+          borderColor: "rgb(75, 192, 192)",
+          tension: 0.1,
+        },
+      ],
+    },
+  });
 </script>
 ```
 
 **Chart Types to Add**:
+
 1. Line charts for time series (CPU, memory, disk over time)
 2. Bar charts for categorical data (drop classification distribution)
 3. Pie charts for composition (disk usage by drive)
@@ -279,6 +297,7 @@ new Chart(ctx, {
 5. Heatmaps for patterns (network drops by hour/day)
 
 **Report Footer Enhancement**:
+
 ```
 Historical Data:
 - First scan: 2025-11-15 (43 days ago)
@@ -298,11 +317,13 @@ Historical Data:
 **Components**:
 
 **A. Enhanced Prometheus Export**
+
 - Expand existing `Bottleneck.Metrics.ps1` with additional metrics
 - Add metric metadata (descriptions, units, types)
 - Support for custom labels (hostname, profile, environment)
 
 **Example Prometheus Output**:
+
 ```prometheus
 # HELP bottleneck_scan_duration_seconds Time taken to complete scan
 # TYPE bottleneck_scan_duration_seconds gauge
@@ -329,12 +350,14 @@ bottleneck_disk_free_bytes{drive="D"} 512000000000
 Create pre-built JSON dashboards:
 
 1. **System Health Overview** (`dashboards/grafana-system-health.json`)
+
    - Panels: CPU, Memory, Disk, Network status
    - Gauges for current values
    - Graphs for trends over time
    - Alert indicators
 
 2. **Network Quality Dashboard** (`dashboards/grafana-network-quality.json`)
+
    - Latency graph (avg, P95)
    - Drop classification pie chart
    - Signal strength heatmap
@@ -358,6 +381,7 @@ Create-GrafanaAlert         # Configure alerting rules
 ```
 
 **Configuration** (`config/grafana.json`):
+
 ```json
 {
   "enabled": false,
@@ -406,6 +430,7 @@ bottleneck_check,host=DESKTOP-ABC123,check_id=CPU_High,severity=Medium score=45.
 ```
 
 **Benefits of InfluxDB**:
+
 - High-frequency data collection (every 5 seconds if needed)
 - Advanced querying with Flux language
 - Built-in downsampling and retention policies
@@ -413,6 +438,7 @@ bottleneck_check,host=DESKTOP-ABC123,check_id=CPU_High,severity=Medium score=45.
 - Handles millions of data points efficiently
 
 **Configuration** (`config/influxdb.json`):
+
 ```json
 {
   "enabled": false,
@@ -448,12 +474,14 @@ Get-AvailableBaselines     # List saved baselines
 **Comparison Features**:
 
 **A. Metric Changes**
+
 - Show delta for all numeric metrics
 - Highlight improvements (green) and regressions (red)
 - Calculate percentage change
 - Flag significant changes (>10% threshold)
 
 **B. Check Differences**
+
 - New issues that appeared
 - Issues that were resolved
 - Issues that got worse/better
@@ -485,6 +513,7 @@ Resolved Issues (2):
 ```
 
 **Export Formats**:
+
 - HTML (interactive, with charts)
 - Markdown (for documentation/tickets)
 - JSON (machine-readable)
@@ -513,11 +542,13 @@ Compare-PostChange                # Compare current state vs. pre-change baselin
 **Regression Indicators**:
 
 1. **Metric-based**:
+
    - Any metric 15%+ worse than 7-day average
    - Multiple metrics declining simultaneously
    - Metric exceeds 2 standard deviations from mean
 
 2. **Check-based**:
+
    - New Critical/High severity issues
    - Increase in total issue count
    - Worsening of existing issues
@@ -538,6 +569,7 @@ Severity: HIGH
 Confidence: 87%
 
 Affected Metrics:
+
 - Boot Time: 38s → 67s (+76% slower)
 - Memory Usage: 62% → 81% (+30% increase)
 - Startup Program Count: 12 → 18 (+50% more)
@@ -551,6 +583,7 @@ Correlation Evidence:
 ✅ Event log shows new service startup failures after update
 
 Recommended Actions:
+
 1. Review Windows Update history
 2. Check for update-specific known issues
 3. Consider rollback if issues persist
@@ -582,6 +615,7 @@ Optimize-SlowChecks             # Identify and suggest optimizations
 **Benchmark Metrics**:
 
 1. **Scan Performance**:
+
    - Quick scan duration (target: <30s)
    - Standard scan duration (target: <60s)
    - Deep scan duration (target: <120s)
@@ -589,11 +623,13 @@ Optimize-SlowChecks             # Identify and suggest optimizations
    - Memory footprint during scan
 
 2. **Report Generation**:
+
    - HTML report generation time
    - Report file size
    - PDF export time (if enabled)
 
 3. **Data Export**:
+
    - JSON export time
    - Prometheus export time
    - Database write time (if history enabled)
@@ -704,14 +740,14 @@ Describe "Historical Database" {
         Initialize-HistoryDatabase
         Test-Path "Reports/bottleneck-history.db" | Should -Be $true
     }
-    
+
     It "Stores scan results" {
         $scan = @{ ScanId = "test123"; Timestamp = Get-Date }
         Add-ScanToHistory -Scan $scan
         $retrieved = Get-HistoricalScans -ScanId "test123"
         $retrieved | Should -Not -BeNullOrEmpty
     }
-    
+
     It "Applies retention policy" {
         # Add 100 old scans
         Remove-OldHistory -RetentionDays 30
@@ -727,7 +763,7 @@ Describe "Trend Analysis" {
         $trend.Slope | Should -Not -BeNullOrEmpty
         $trend.R2 | Should -BeGreaterThan 0
     }
-    
+
     It "Detects performance regression" {
         $isRegression = Test-PerformanceRegression -CurrentValue 85 -Historical @(60, 62, 58, 65)
         $isRegression | Should -Be $true
@@ -743,14 +779,14 @@ Describe "Historical Integration" {
     It "Full workflow: Scan → Store → Query → Compare" {
         # Run scan
         $scan = Invoke-BottleneckScan -Profile quick
-        
+
         # Store in history
         Add-ScanToHistory -Scan $scan
-        
+
         # Query history
         $history = Get-HistoricalScans -Last 1
         $history.Count | Should -Be 1
-        
+
         # Compare
         $comparison = Compare-AgainstBaseline
         $comparison | Should -Not -BeNullOrEmpty
@@ -778,30 +814,35 @@ Describe "Historical Integration" {
 ### Functional Requirements
 
 ✅ **Historical Storage**:
+
 - [ ] Store scan results for at least 30 days
 - [ ] Query performance: <1s for 30-day history
 - [ ] Database size: <100MB per 1000 scans
 - [ ] Automatic cleanup based on retention policy
 
 ✅ **Trend Analysis**:
+
 - [ ] Detect degrading trends with 80%+ accuracy
 - [ ] Calculate regression for all key metrics
 - [ ] Identify change points within 24 hours
 - [ ] Provide 7-day and 30-day predictions
 
 ✅ **Dashboard Integration**:
+
 - [ ] Prometheus export with 50+ metrics
 - [ ] Grafana dashboards render correctly
 - [ ] InfluxDB ingestion <1s per scan
 - [ ] Real-time dashboard updates
 
 ✅ **Comparison Reports**:
+
 - [ ] Side-by-side scan comparison in <5s
 - [ ] Highlight significant changes (>10% delta)
 - [ ] Export in HTML, Markdown, JSON formats
 - [ ] Visual diff display with color coding
 
 ✅ **Regression Detection**:
+
 - [ ] Detect regression within 1 scan after occurrence
 - [ ] Correlate with system changes (updates, installs)
 - [ ] Confidence score 75%+ for true positives
@@ -831,18 +872,21 @@ Describe "Historical Integration" {
 ### Week 1: Foundation (Days 1-7)
 
 **Day 1-2: Historical Database**
+
 - [ ] Implement `Bottleneck.History.ps1`
 - [ ] Create SQLite schema and functions
 - [ ] Add database initialization to run.ps1
 - [ ] Test storage and retrieval
 
 **Day 3-4: Trend Analysis Engine**
+
 - [ ] Implement `Bottleneck.Trends.ps1`
 - [ ] Add linear regression calculations
 - [ ] Create baseline comparison logic
 - [ ] Implement change point detection
 
 **Day 5-7: Enhanced Reports**
+
 - [ ] Modify `Bottleneck.EnhancedReport.ps1`
 - [ ] Add Chart.js integration
 - [ ] Create trend visualization panels
@@ -851,18 +895,21 @@ Describe "Historical Integration" {
 ### Week 2: Integrations (Days 8-14)
 
 **Day 8-9: Grafana Integration**
+
 - [ ] Implement `Bottleneck.Integrations.Grafana.ps1`
 - [ ] Enhance Prometheus export format
 - [ ] Create pre-built dashboard templates
 - [ ] Add auto-configuration scripts
 
 **Day 10-11: InfluxDB Integration**
+
 - [ ] Implement `Bottleneck.Integrations.InfluxDB.ps1`
 - [ ] Add line protocol export
 - [ ] Create batch write functionality
 - [ ] Test high-frequency writes
 
 **Day 12-14: Comparison & Regression**
+
 - [ ] Implement `Bottleneck.Comparison.ps1`
 - [ ] Create scan diff engine
 - [ ] Implement `Bottleneck.Regression.ps1`
@@ -871,24 +918,28 @@ Describe "Historical Integration" {
 ### Week 3: Polish & Testing (Days 15-21)
 
 **Day 15-16: Benchmarking**
+
 - [ ] Implement `Bottleneck.Benchmark.ps1`
 - [ ] Create performance test suite
 - [ ] Add benchmark tracking over time
 - [ ] Optimize slow checks
 
 **Day 17-18: Testing**
+
 - [ ] Write Pester unit tests
 - [ ] Create integration test suite
 - [ ] Manual testing across profiles
 - [ ] Performance regression testing
 
 **Day 19-20: Documentation**
+
 - [ ] Update README with trend features
 - [ ] Create GRAFANA_SETUP.md guide
 - [ ] Document comparison CLI
 - [ ] Add trend analysis examples
 
 **Day 21: Release Prep**
+
 - [ ] Code review and cleanup
 - [ ] Final testing pass
 - [ ] Update CHANGELOG
@@ -901,6 +952,7 @@ Describe "Historical Integration" {
 ### For Existing Users
 
 **Automatic Migration**:
+
 1. First run after Phase 7 upgrade:
    - Creates history database automatically
    - Imports existing reports from `Reports/` directory
@@ -908,6 +960,7 @@ Describe "Historical Integration" {
    - No user action required
 
 **Optional Configuration**:
+
 ```powershell
 # Enable InfluxDB integration
 Edit-BottleneckConfig -Component InfluxDB -Enable
@@ -973,6 +1026,7 @@ Set-HistoryRetention -Days 90
 ## 🔮 Future Enhancements (Post-Phase 7)
 
 **Phase 8 Candidates**:
+
 1. Machine learning anomaly detection
 2. Predictive failure analysis (SMART, event patterns)
 3. Multi-host comparison (fleet management)

@@ -160,9 +160,9 @@ function Invoke-BottleneckScan {
     else {
         # Parallel execution with bounded concurrency (PS7+)
         $maxConcurrency = switch ($Tier) {
-            'Quick'    { 2 }
+            'Quick' { 2 }
             'Standard' { 4 }
-            Default    { 6 }
+            Default { 6 }
         }
 
         Write-BottleneckLog "Using parallel execution (max $maxConcurrency jobs)" -Level "INFO"

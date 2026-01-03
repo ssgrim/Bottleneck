@@ -83,7 +83,7 @@ function Get-HistoricalScans {
     if (-not $ReportsPath) {
         $ReportsPath = Join-Path $global:BottleneckModuleRoot 'Reports'
     }
-    
+
     $historyPath = Join-Path $ReportsPath 'history'
     $historyIndex = Join-Path $historyPath 'index.json'
 
@@ -385,9 +385,9 @@ function Get-HistoricalTrendReport {
             $avg = ($data.Score | Measure-Object -Average).Average
             $change = $last - $first
             $changePercent = if ($first -ne 0) { [math]::Round(($change / $first) * 100, 1) } else { 0 }
-            
+
             $trend = if ($changePercent -gt 10) { 'Worsening' } elseif ($changePercent -lt -10) { 'Improving' } else { 'Stable' }
-            
+
             $trends += [PSCustomObject]@{
                 Category = $category
                 Trend = $trend

@@ -41,25 +41,68 @@ function Invoke-BottleneckParallelChecks {
         [ValidateRange(1,16)][int]$MaxConcurrency = 4
     )
 
-    $results = @()
+    $results = New-Object System.Collections.Generic.List[object]
     $jobs = @()
+
+    $recordJob = {
+        param($JobRef)
+
+        try {
+            $payload = Receive-Job -Job $JobRef -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
+            if ($payload) {
+                $payload | Where-Object { $_ -and -not $_.Failed } | ForEach-Object { $results.Add($_) }
+                $failed = $payload | Where-Object { $_.Failed }
+                if ($failed.Count -gt 0) {
+                    $failMsgs = ($failed | ForEach-Object { $_.Error }) -join '; '
+                    Write-Warning "Parallel check '$($JobRef.Name)' returned errors: $failMsgs"
+                }
+            }
+            else {
+                Write-Warning "Parallel check '$($JobRef.Name)' returned no payload"
+            }
+
+            if ($JobRef.Error.Count -gt 0) {
+                $results.Add([PSCustomObject]@{
+                    Id        = 'Error'
+                    CheckName = $JobRef.Name
+                    Error     = ($JobRef.Error | ForEach-Object { $_.Exception.Message }) -join '; '
+                    Failed    = $true
+                })
+                Write-Warning "Parallel check '$($JobRef.Name)' error: $(($JobRef.Error | ForEach-Object { $_.Exception.Message }) -join '; ')"
+            }
+        }
+        catch {
+            $results.Add([PSCustomObject]@{
+                Id        = 'Error'
+                CheckName = $JobRef.Name
+                Error     = $_.Exception.Message
+                Failed    = $true
+            })
+            Write-Warning "Parallel check '$($JobRef.Name)' receive failed: $($_.Exception.Message)"
+        }
+    }
 
     foreach ($check in $Checks) {
         while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $MaxConcurrency) {
-            $ready = Receive-Job -Job ($jobs | Where-Object { $_.State -ne 'Running' }) -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
-            if ($ready) { $results += ($ready | Where-Object { $_ -and -not $_.Failed }) }
-            $jobs = $jobs | Where-Object { $_.State -eq 'Running' }
+            $readyJob = Wait-Job -Job $jobs -Any -Timeout 2 -ErrorAction SilentlyContinue
+            if ($readyJob) {
+                & $recordJob $readyJob
+                $jobs = $jobs | Where-Object { $_.Id -ne $readyJob.Id -and $_.State -eq 'Running' }
+            }
+            else {
+                Start-Sleep -Milliseconds 50
+            }
         }
 
-        $job = Start-ThreadJob -ScriptBlock {
+        $job = Start-ThreadJob -Name $check -ScriptBlock {
             param($checkName, $modulePath)
             try {
                 Import-Module (Join-Path $modulePath 'Bottleneck.psm1') -Force -ErrorAction Stop
                 $result = & $checkName
-                if ($result) { $result }
+                if ($result) { return $result }
             }
             catch {
-                [PSCustomObject]@{
+                return [PSCustomObject]@{
                     Id        = 'Error'
                     CheckName = $checkName
                     Error     = $_.Exception.Message
@@ -71,12 +114,17 @@ function Invoke-BottleneckParallelChecks {
     }
 
     while ($jobs.Count -gt 0) {
-        $ready = Receive-Job -Job $jobs -Wait -AutoRemoveJob -ErrorAction SilentlyContinue
-        if ($ready) { $results += ($ready | Where-Object { $_ -and -not $_.Failed }) }
-        $jobs = $jobs | Where-Object { $_.State -eq 'Running' }
+        $readyJob = Wait-Job -Job $jobs -Any -Timeout 2 -ErrorAction SilentlyContinue
+        if ($readyJob) {
+            & $recordJob $readyJob
+            $jobs = $jobs | Where-Object { $_.Id -ne $readyJob.Id -and $_.State -eq 'Running' }
+        }
+        else {
+            Start-Sleep -Milliseconds 50
+        }
     }
 
-    return $results
+    return $results.ToArray()
 }
 
 # Return ordered list of check groups based on tier

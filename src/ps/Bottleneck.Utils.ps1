@@ -95,11 +95,11 @@ function Get-SafeWinEvent {
         $events = $null
         if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
             $events = Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
-                Get-WinEvent -FilterHashtable $using:FilterHashtable -MaxEvents $using:MaxEvents -ErrorAction SilentlyContinue
+                Get-WinEvent -FilterHashtable $using:FilterHashtable -MaxEvents $using:MaxEvents -ErrorAction Stop
             }
         }
         else {
-            $events = Get-WinEvent -FilterHashtable $FilterHashtable -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
+            $events = Get-WinEvent -FilterHashtable $FilterHashtable -MaxEvents $MaxEvents -ErrorAction Stop
         }
 
         # Retry with narrower window if nothing returned and StartTime was present
@@ -108,11 +108,11 @@ function Get-SafeWinEvent {
             $fallbackFilter['StartTime'] = (Get-Date).AddDays(-1 * $RetryWindowDays)
             if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
                 $events = Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
-                    Get-WinEvent -FilterHashtable $using:fallbackFilter -MaxEvents $using:MaxEvents -ErrorAction SilentlyContinue
+                    Get-WinEvent -FilterHashtable $using:fallbackFilter -MaxEvents $using:MaxEvents -ErrorAction Stop
                 }
             }
             else {
-                $events = Get-WinEvent -FilterHashtable $fallbackFilter -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
+                $events = Get-WinEvent -FilterHashtable $fallbackFilter -MaxEvents $MaxEvents -ErrorAction Stop
             }
             if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
                 Write-BottleneckLog "Event log fallback applied: narrowed window to $RetryWindowDays days for $($fallbackFilter.LogName)" -Level "WARN"
