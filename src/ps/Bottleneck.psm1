@@ -47,57 +47,6 @@ catch {
 }
 
 # Load other modules (hardened paths)
-Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
-# Bottleneck.psm1
-# Main module entry point
-
-$ErrorActionPreference = 'Continue'  # Don't let errors stop module loading
-
-function Import-ModuleFile($name) {
-    $filePath = Join-Path $PSScriptRoot $name
-    if (-not (Test-Path $filePath)) {
-        Write-Warning "Module file not found: $name"
-        return
-    }
-    try {
-        # Use script scope to ensure functions stay in module scope
-        . $ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create((Get-Content $filePath -Raw)))
-    }
-    catch {
-        Write-Warning "Failed to load module file '$name': $_"
-        Write-Warning "Error at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line)"
-    }
-}
-
-# Load debugging and observability first
-Import-ModuleFile 'Bottleneck.Debug.ps1'
-Import-ModuleFile 'Bottleneck.HealthCheck.ps1'
-
-# Load performance and logging utilities - dot-source at script scope to export Get-CachedCimInstance
-. (Join-Path $PSScriptRoot 'Bottleneck.Performance.ps1')
-Import-ModuleFile 'Bottleneck.Logging.ps1'
-
-# Set module root for history
-$global:BottleneckModuleRoot = Split-Path $PSScriptRoot -Parent
-
-# Load history functions - dot-source at script scope
-. (Join-Path $PSScriptRoot 'Bottleneck.History.ps1')
-
-# Initialize logging (guarded)
-try {
-    if (Get-Command Initialize-BottleneckLogging -ErrorAction SilentlyContinue) {
-        Initialize-BottleneckLogging
-    }
-    else {
-        Write-Warning "Logging initialization unavailable; continuing without centralized log"
-    }
-}
-catch {
-    Write-Warning "Failed to initialize logging: $_"
-}
-
-# Load other modules (hardened paths)
-Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
 . (Join-Path $PSScriptRoot 'Bottleneck.Checks.ps1')
 Import-ModuleFile 'Bottleneck.Fixes.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Parallel.ps1')
@@ -191,6 +140,18 @@ function Invoke-BottleneckScan {
                 $result = & $check
                 $checkDuration = ((Get-Date) - $checkStart).TotalMilliseconds
                 Write-BottleneckLog "Check $check completed in $([math]::Round($checkDuration))ms" -Level "DEBUG"
+                if (Get-Command Write-BottleneckPerformance -ErrorAction SilentlyContinue) {
+                    Write-BottleneckPerformance -Operation "Check:$check" -DurationMs $checkDuration -Component $Tier
+                }
+                if (Get-Command Test-PerformanceBudget -ErrorAction SilentlyContinue) {
+                    $budgetCheck = Test-PerformanceBudget -CheckName $check -ElapsedTime ([timespan]::FromMilliseconds($checkDuration)) -Tier $Tier
+                    if ($budgetCheck.Exceeded) {
+                        $elapsed = [math]::Round($budgetCheck.ElapsedSeconds, 2)
+                        $budget = $budgetCheck.BudgetSeconds
+                        $msg = "Performance budget exceeded for $check : ${elapsed}s (budget ${budget}s)"
+                        Write-BottleneckLog $msg -Level "WARN"
+                    }
+                }
                 if ($result) { $results += $result }
             }
             catch {

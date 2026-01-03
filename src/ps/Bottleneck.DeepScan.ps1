@@ -1,6 +1,98 @@
 # Bottleneck.DeepScan.ps1
 # Advanced deep-tier diagnostic checks
 
+# Safe event log query wrapper with fallbacks for null start time, access denied, and timeouts
+function Get-EventLogSafeQuery {
+    param(
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$LogName,
+        [datetime]$StartTime,
+        [datetime]$EndTime,
+        [ValidateRange(1,300)][int]$TimeoutSeconds = 10,
+        [ValidateRange(1,180)][int]$RetryWindowDays = 7,
+        [ValidateRange(1,2000)][int]$MaxEvents = 500
+    )
+
+    $filter = @{ LogName = $LogName }
+    if ($StartTime) { $filter['StartTime'] = $StartTime }
+    if ($EndTime) { $filter['EndTime'] = $EndTime }
+
+    try {
+        $events = $null
+        if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
+            $events = Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
+                Get-WinEvent -FilterHashtable $using:filter -MaxEvents $using:MaxEvents -ErrorAction Stop
+            }
+        }
+        else {
+            $events = Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction Stop
+        }
+
+        # Retry with narrower window if nothing returned and we had a StartTime
+        if ((-not $events -or $events.Count -eq 0) -and $filter.ContainsKey('StartTime')) {
+            $fallbackFilter = $filter.Clone()
+            $fallbackFilter['StartTime'] = (Get-Date).AddDays(-1 * $RetryWindowDays)
+            if (Get-Command Invoke-WithTimeout -ErrorAction SilentlyContinue) {
+                $events = Invoke-WithTimeout -TimeoutSeconds $TimeoutSeconds -ScriptBlock {
+                    Get-WinEvent -FilterHashtable $using:fallbackFilter -MaxEvents $using:MaxEvents -ErrorAction Stop
+                }
+            }
+            else {
+                $events = Get-WinEvent -FilterHashtable $fallbackFilter -MaxEvents $MaxEvents -ErrorAction Stop
+            }
+            if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
+                Write-BottleneckLog "Event log fallback applied: narrowed window to $RetryWindowDays days for $($fallbackFilter.LogName)" -Level "WARN"
+            }
+        }
+
+        return @{
+            Success = $true
+            Reason  = 'OK'
+            Count   = if ($events) { $events.Count } else { 0 }
+            Events  = $events
+            Note    = ''
+        }
+    }
+    catch [System.UnauthorizedAccessException] {
+        $countOutput = $null
+        try { $countOutput = wevtutil qe $LogName /c /q:"*" 2>$null } catch { }
+        if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
+            Write-BottleneckLog "Access denied to event log: $LogName" -Level "WARN"
+        }
+        return @{
+            Success = $false
+            Reason  = 'AccessDenied'
+            Count   = $countOutput
+            Events  = @()
+            Note    = 'Summary only; access denied'
+        }
+    }
+    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
+        if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
+            Write-BottleneckLog "Event log not found: $LogName" -Level "WARN"
+        }
+        return @{
+            Success = $false
+            Reason  = 'NotFound'
+            Count   = 0
+            Events  = @()
+            Note    = 'Log not found'
+        }
+    }
+    catch {
+        if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
+            $errMsg = "Error querying event log $LogName - $($_.Exception.Message)"
+            Write-BottleneckLog $errMsg -Level "WARN"
+        }
+        return @{
+            Success = $false
+            Reason  = $_.Exception.GetType().Name
+            Count   = 0
+            Events  = @()
+            Note    = $_.Exception.Message
+        }
+    }
+}
+
 function Test-BottleneckETW {
     try {
         # ETW analysis requires elevated permissions and is resource-intensive
@@ -184,12 +276,20 @@ function Test-BottleneckEventLog {
         $logs = @('System', 'Application', 'Security')
         $criticalErrors = @()
         $patterns = @()
+        $logNotes = @()
 
         foreach ($logName in $logs) {
             # Get critical errors from last 30 days (resilient to null/invalid StartTime and access errors)
             $start = (Get-Date).AddDays(-30)
-            $filter = @{ Level = 1, 2; StartTime = $start; LogName = $logName }
-            $errors = Get-SafeWinEvent -FilterHashtable $filter -MaxEvents 500 -TimeoutSeconds 15
+            $query = Get-EventLogSafeQuery -LogName $logName -StartTime $start -TimeoutSeconds 15 -RetryWindowDays 7 -MaxEvents 500
+
+            if (-not $query.Success) {
+                $note = "$logName - $($query.Reason) ($($query.Note))"
+                $logNotes += $note
+                continue
+            }
+
+            $errors = $query.Events | Where-Object { $_.Level -in 1,2 }
 
             if ($errors) {
                 $criticalErrors += $errors
@@ -212,12 +312,15 @@ function Test-BottleneckEventLog {
         $driverCrashes = $criticalErrors | Where-Object { $_.Message -match 'driver|bugcheck|bluescreen|stop error' }
 
         $impact = if ($driverCrashes.Count -gt 5) { 9 } elseif ($diskErrors.Count -gt 10 -or $memoryErrors.Count -gt 10) { 7 } elseif ($criticalErrors.Count -gt 100) { 6 } else { 2 }
-        $confidence = 8
+        $confidence = if ($logNotes.Count -gt 0 -and $criticalErrors.Count -eq 0) { 6 } else { 8 }
         $effort = 4
         $priority = 4
         $evidence = "Critical errors (30d): $($criticalErrors.Count), Disk: $($diskErrors.Count), Memory: $($memoryErrors.Count), Driver crashes: $($driverCrashes.Count)"
         if ($patterns.Count -gt 0) {
             $evidence += " - Patterns: $($patterns -join '; ')"
+        }
+        if ($logNotes.Count -gt 0) {
+            $evidence += " - Notes: $($logNotes -join '; ')"
         }
         $fixId = ''
         $msg = if ($driverCrashes.Count -gt 5) {
@@ -227,7 +330,7 @@ function Test-BottleneckEventLog {
         } elseif ($impact -ge 6) {
             'High volume of errors detected.'
         } else {
-            'Event log analysis shows normal activity.'
+            if ($logNotes.Count -gt 0) { 'Event log analysis partially collected.' } else { 'Event log analysis shows normal activity.' }
         }
 
         return New-BottleneckResult -Id 'EventLog' -Tier 'Deep' -Category 'Event Log Analysis' -Impact $impact -Confidence $confidence -Effort $effort -Priority $priority -Evidence $evidence -FixId $fixId -Message $msg

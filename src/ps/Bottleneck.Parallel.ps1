@@ -43,6 +43,7 @@ function Invoke-BottleneckParallelChecks {
 
     $results = New-Object System.Collections.Generic.List[object]
     $jobs = @()
+    $jobStart = @{}
 
     $recordJob = {
         param($JobRef)
@@ -69,6 +70,25 @@ function Invoke-BottleneckParallelChecks {
                     Failed    = $true
                 })
                 Write-Warning "Parallel check '$($JobRef.Name)' error: $(($JobRef.Error | ForEach-Object { $_.Exception.Message }) -join '; ')"
+            }
+
+            if ($jobStart.ContainsKey($JobRef.Id)) {
+                $elapsed = (Get-Date) - $jobStart[$JobRef.Id]
+                if (Get-Command Write-BottleneckPerformance -ErrorAction SilentlyContinue) {
+                    Write-BottleneckPerformance -Operation "Check:$($JobRef.Name)" -DurationMs $elapsed.TotalMilliseconds -Component $Tier
+                }
+                if (Get-Command Test-PerformanceBudget -ErrorAction SilentlyContinue) {
+                    $budgetCheck = Test-PerformanceBudget -CheckName $JobRef.Name -ElapsedTime $elapsed -Tier $Tier
+                    if ($budgetCheck.Exceeded) {
+                        $msg = "Performance budget exceeded for $($JobRef.Name): $([math]::Round($budgetCheck.ElapsedSeconds,2))s (budget $($budgetCheck.BudgetSeconds)s)"
+                        if (Get-Command Write-BottleneckLog -ErrorAction SilentlyContinue) {
+                            Write-BottleneckLog $msg -Level "WARN"
+                        }
+                        else {
+                            Write-Warning $msg
+                        }
+                    }
+                }
             }
         }
         catch {
@@ -110,6 +130,7 @@ function Invoke-BottleneckParallelChecks {
                 }
             }
         } -ArgumentList $check, $ModulePath -ErrorAction SilentlyContinue
+        $jobStart[$job.Id] = Get-Date
         $jobs += $job
     }
 

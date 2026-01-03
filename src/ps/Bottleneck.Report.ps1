@@ -917,15 +917,26 @@ document.addEventListener('DOMContentLoaded', function() {
 function Get-BottleneckEventLogSummary {
     param([ValidateRange(1, 365)][int]$Days = 7)
     $since = (Get-Date).AddDays(-$Days)
-    $filter = @{ StartTime = $since; LogName = 'System' }
-    $events = Get-SafeWinEvent -FilterHashtable $filter -MaxEvents 1000 -TimeoutSeconds 15
-    $errors = $events | Where-Object { $_.LevelDisplayName -eq 'Error' }
-    $warnings = $events | Where-Object { $_.LevelDisplayName -eq 'Warning' }
+    $result = Get-EventLogSafeQuery -LogName 'System' -StartTime $since -TimeoutSeconds 15 -RetryWindowDays 7 -MaxEvents 1000
+
+    if (-not $result.Success) {
+        return [PSCustomObject]@{
+            ErrorCount     = 0
+            WarningCount   = 0
+            RecentErrors   = @()
+            RecentWarnings = @()
+            Note           = "System log unavailable: $($result.Reason) ($($result.Note))"
+        }
+    }
+
+    $errors = $result.Events | Where-Object { $_.LevelDisplayName -eq 'Error' }
+    $warnings = $result.Events | Where-Object { $_.LevelDisplayName -eq 'Warning' }
     [PSCustomObject]@{
         ErrorCount     = $errors.Count
         WarningCount   = $warnings.Count
         RecentErrors   = $errors | Select-Object -First 5 -Property TimeCreated, Message
         RecentWarnings = $warnings | Select-Object -First 5 -Property TimeCreated, Message
+        Note           = ''
     }
 }
 function New-WiresharkSection {
