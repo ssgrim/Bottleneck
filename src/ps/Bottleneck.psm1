@@ -48,7 +48,7 @@ catch {
 
 # Load other modules (hardened paths)
 Import-ModuleFile 'Bottleneck.Utils.ps1'  # Includes Constants
-Import-ModuleFile 'Bottleneck.Checks.ps1'
+. (Join-Path $PSScriptRoot 'Bottleneck.Checks.ps1')
 Import-ModuleFile 'Bottleneck.Fixes.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Parallel.ps1')
 
@@ -59,7 +59,6 @@ Import-ModuleFile 'Bottleneck.Fixes.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.Hardware.ps1')
 
 # Dot-source check modules at script scope to ensure proper function export
-. (Join-Path $PSScriptRoot 'Bottleneck.WindowsFeatures.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Network.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Security.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.UserExperience.ps1')
@@ -67,8 +66,6 @@ Import-ModuleFile 'Bottleneck.Fixes.ps1'
 . (Join-Path $PSScriptRoot 'Bottleneck.DeepScan.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Profiles.ps1')
 . (Join-Path $PSScriptRoot 'Bottleneck.Wireshark.ps1')
-
-Import-ModuleFile 'Bottleneck.Baseline.ps1'
 
 # Check admin rights
 $script:IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
